@@ -4,13 +4,13 @@
   "largeImageText": "",
   "pollIntervalMs": 2000,
   "staleAfterMs": 10000,
-  "hideAfterIdleMs": 300000,
-  "detailsFormat": "{title}",
+  "hideAfterIdleMs": 600000,
+  "detailsFormat": "REAPER v{version}",
   "stateFormat": "{emoji} {fxOrTransport} · {bpm}",
   "showElapsed": true,
   "smallImageByTransport": true,
   "vsts": [
-    { "match": "Serum", "label": "Serum", "imageKey": "serum", "downloadUrl": "https://xferrecords.com/products/serum" },
+    { "match": "Serum 2", "label": "Serum 2", "imageKey": "serum2", "downloadUrl": "https://xferrecords.com/products/serum-2" },
     { "match": "Vital", "label": "Vital", "imageKey": "vital", "downloadUrl": "https://vital.audio/" }
   ],
   "button1Label": "Get REAPER",

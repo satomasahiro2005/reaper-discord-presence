@@ -102,7 +102,7 @@ func defaultConfig() Config {
 		StaleAfterMs:    10000,
 		HideAfterIdleMs: 300000, // 5 min of inactivity hides the presence; 0 disables
 
-		DetailsFormat: "{title}",
+		DetailsFormat: "REAPER v{version}", // robust: from reaper.GetAppVersion(). Use "{title}" to mirror the title bar (adds the license line, but reads the window title).
 		StateFormat:   "{emoji} {fxOrTransport} · {bpm}",
 
 		ShowElapsed:           true,

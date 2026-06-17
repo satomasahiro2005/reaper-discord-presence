@@ -10,7 +10,7 @@ REAPER を起動している間、Discord のプロフィールに「いま REAP
 
 - **Node 不要。** 配布物は単体 exe と Lua スクリプトだけ。常駐するのは exe ひとつです。
 - **公式の Rich Presence IPC のみ。** ユーザートークンや self-bot は一切使いません。
-- **タイトルバー連動。** バージョン行は REAPER のタイトルバーをそのまま読み取るので、ライセンス表記まで自動で反映されます。
+- **バージョンは公式APIから取得。** 既定では `reaper.GetAppVersion()` でバージョンを取得します（ウィンドウ走査に依存しない安全な方法）。ライセンス表記つきのタイトルバー文字列を出したい場合だけ `detailsFormat` を `{title}` にできます。
 - **起動も終了も自動。** REAPER を起動すれば表示され、閉じれば数秒で消えます。一定時間操作がなければ自動で非表示にもできます。
 - **選択トラックのプラグインを表示。** 選択中トラックの先頭 FX 名（例: Serum）を出します。よく使う VST は専用アイコンや配布ページへのボタンに登録できます。
 - **プライバシー配慮。** プロジェクトのファイル名は送信も表示もしません。
@@ -19,7 +19,7 @@ REAPER を起動している間、Discord のプロフィールに「いま REAP
 
 ```
 Playing REAPER
-REAPER v7.74 -Licensed for personal/small business use
+REAPER v7.74/x64
 ▶️ Serum · 128 BPM
 ```
 
@@ -101,7 +101,7 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 | `pollIntervalMs` | `2000` | 状態 JSON を確認する間隔（ミリ秒） |
 | `staleAfterMs` | `10000` | JSON がこの時間更新されないと REAPER 終了とみなす（ミリ秒） |
 | `hideAfterIdleMs` | `300000` | この時間 REAPER を操作しないと自動で非表示（5 分）。`0` で無効 |
-| `detailsFormat` | `{title}` | 2 行目のテンプレート（下記） |
+| `detailsFormat` | `REAPER v{version}` | 2 行目のテンプレート（下記）。既定はAPI取得の安全な版 |
 | `stateFormat` | `{emoji} {fxOrTransport} · {bpm}` | 3 行目のテンプレート（下記） |
 | `showElapsed` | `true` | 経過時間（for HH:MM）を表示する |
 | `smallImageByTransport` | `true` | 再生状態の小バッジを表示する（要 `play`/`pause`/`record`/`stop` アセット） |
@@ -118,7 +118,7 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 
 | プレースホルダ | 中身 |
 |------|------|
-| `{title}` | REAPER のタイトルバー文字列（例 `REAPER v7.74 -Licensed ...`） |
+| `{title}` | REAPER のタイトルバー文字列（例 `REAPER v7.74 -Licensed ...`）。ライセンス表記を含むが**ウィンドウタイトルを読む**方式 |
 | `{version}` | バージョン（例 `7.74/x64`） |
 | `{emoji}` | 再生状態の絵文字（▶️ / ⏸️ / ⏺️ / ⏹️） |
 | `{transport}` | 再生状態の語（Playing / Paused / Recording / Stopped） |

@@ -10,6 +10,9 @@ reaper_discord_presence_config.json
 # Locally-extracted REAPER icon (REAPER's trademark; not redistributed here)
 reaper-icon-512.png
 
+# Locally-generated badge icons (per-user, uploaded to Discord Art Assets)
+icons/
+
 # OS junk
 Thumbs.db
 desktop.ini
