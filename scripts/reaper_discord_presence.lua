@@ -109,6 +109,9 @@ local function loop()
     local fx        = top_fx_name()
     local srate     = reaper.GetSetProjectInfo(0, "PROJECT_SRATE", 0, false)
     if not srate or srate <= 0 then srate = ini_srate end
+    local inlat, outlat = reaper.GetInputOutputLatency()      -- latency in samples
+    local lat_in  = (srate > 0) and (inlat  / srate * 1000) or 0  -- ms
+    local lat_out = (srate > 0) and (outlat / srate * 1000) or 0  -- ms
 
     local fingerprint = string.format("%d|%.3f|%.3f|%d|%s",
       state,
@@ -123,13 +126,15 @@ local function loop()
     local idle = now - last_activity
 
     local json = string.format(
-      '{"app":"REAPER","version":"%s","transport":"%s","bpm":%.3f,"fx":"%s","srate":%.0f,"bufsize":%d,"idleSeconds":%.1f,"timestamp":%.3f}',
+      '{"app":"REAPER","version":"%s","transport":"%s","bpm":%.3f,"fx":"%s","srate":%.0f,"bufsize":%d,"latIn":%.1f,"latOut":%.1f,"idleSeconds":%.1f,"timestamp":%.3f}',
       json_escape(version),
       json_escape(transport),
       bpm,
       json_escape(fx),
       srate,
       audio_bufsize,
+      lat_in,
+      lat_out,
       idle,
       now
     )

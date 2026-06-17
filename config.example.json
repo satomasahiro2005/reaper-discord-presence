@@ -5,9 +5,9 @@
   "pollIntervalMs": 2000,
   "staleAfterMs": 10000,
   "awayAfterMs": 600000,
-  "awayText": "Away",
-  "detailsFormat": "REAPER v{version}",
-  "stateFormat": "{emoji} {fxOrTransport} · {bpm}",
+  "awayText": "Idle",
+  "detailsFormat": "v{version} · {srate} · {bufsize} · {latency}",
+  "stateFormat": "{fx} · {bpm}",
   "showElapsed": true,
   "smallImageByTransport": true,
   "vsts": [

@@ -106,9 +106,9 @@ func defaultConfig() Config {
 		PollIntervalMs:  2000,
 		StaleAfterMs:    10000,
 		AwayAfterMs:     600000, // 10 min of inactivity -> "away"; 0 disables
-		AwayText:        "Away",
+		AwayText:        "Idle",
 
-		DetailsFormat: "REAPER v{version}", // robust: from reaper.GetAppVersion(). Use "{title}" to mirror the title bar (adds the license line, but reads the window title).
+		DetailsFormat: "v{version} · {srate} · {bufsize} · {latency}", // version from reaper.GetAppVersion() + audio info; use "{title}" to mirror the title bar
 		StateFormat:   "{emoji} {fxOrTransport} · {bpm}",
 
 		ShowElapsed:           true,
@@ -144,7 +144,7 @@ func loadConfig(path string) Config {
 		cfg.AwayAfterMs = cfg.HideAfterIdleMs // migrate the old hideAfterIdleMs key
 	}
 	if cfg.AwayText == "" {
-		cfg.AwayText = "Away"
+		cfg.AwayText = "Idle"
 	}
 	if cfg.LargeImageKey == "" {
 		cfg.LargeImageKey = "reaper"
@@ -164,6 +164,8 @@ type Status struct {
 	Fx          string  `json:"fx"`          // raw name of the top FX on the selected track
 	Srate       float64 `json:"srate"`       // audio sample rate in Hz (e.g. 48000)
 	Bufsize     int     `json:"bufsize"`     // audio block size in samples (e.g. 128)
+	LatIn       float64 `json:"latIn"`       // input latency in ms
+	LatOut      float64 `json:"latOut"`      // output latency in ms
 	IdleSeconds float64 `json:"idleSeconds"` // seconds since the last REAPER activity
 	Timestamp   float64 `json:"timestamp"`
 }
@@ -397,6 +399,14 @@ func formatSrate(hz float64) string {
 	return strconv.FormatFloat(hz/1000, 'f', -1, 64) + "kHz"
 }
 
+// formatLatency renders input/output latency as "2.2/3.0ms", "" if unknown.
+func formatLatency(inMs, outMs float64) string {
+	if inMs <= 0 && outMs <= 0 {
+		return ""
+	}
+	return strconv.FormatFloat(inMs, 'f', 1, 64) + "/" + strconv.FormatFloat(outMs, 'f', 1, 64) + "ms"
+}
+
 // cleanFxName turns REAPER's raw FX name into a friendly plugin name:
 // "VSTi: Serum (Xfer Records)" -> "Serum", "JS: ReaEQ" -> "ReaEQ".
 func cleanFxName(raw string) string {
@@ -493,6 +503,7 @@ func buildActivity(cfg Config, st Status, sessionStart int64) (*activity, string
 		"emoji": emoji, "transport": word,
 		"fx": fxLabel, "fxOrTransport": fxOrTransport, "bpm": bpm,
 		"srate": formatSrate(st.Srate), "bufsize": bufsize,
+		"latency": formatLatency(st.LatIn, st.LatOut),
 	}
 	detailsFmt := cfg.DetailsFormat
 	if detailsFmt == "" {
@@ -575,7 +586,7 @@ func buildAwayActivity(cfg Config, st Status, awayStart int64) (*activity, strin
 	}
 	vars := map[string]string{
 		"title": title, "version": version,
-		"emoji": "", "transport": "", "fx": "", "fxOrTransport": "", "bpm": "", "srate": "", "bufsize": "",
+		"emoji": "", "transport": "", "fx": "", "fxOrTransport": "", "bpm": "", "srate": "", "bufsize": "", "latency": "",
 	}
 	detailsFmt := cfg.DetailsFormat
 	if detailsFmt == "" {

@@ -101,8 +101,8 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 | `pollIntervalMs` | `2000` | 状態 JSON を確認する間隔（ミリ秒） |
 | `staleAfterMs` | `10000` | JSON がこの時間更新されないと REAPER 終了とみなす（ミリ秒） |
 | `awayAfterMs` | `600000` | この時間 REAPER を操作しないと「離席中」表示に切替（10 分）。`0` で無効。戻ると経過時間が 0 にリセット |
-| `awayText` | `Away` | 離席中に 3 行目へ出す文言（例 `離席中`） |
-| `detailsFormat` | `REAPER v{version}` | 2 行目のテンプレート（下記）。既定はAPI取得の安全な版 |
+| `awayText` | `Idle` | 離席中に 3 行目へ出す文言（例 `Idle` / `離席中`） |
+| `detailsFormat` | `v{version} · {srate} · {bufsize} · {latency}` | 2 行目のテンプレート（下記） |
 | `stateFormat` | `{emoji} {fxOrTransport} · {bpm}` | 3 行目のテンプレート（下記） |
 | `showElapsed` | `true` | 経過時間（for HH:MM）を表示する |
 | `smallImageByTransport` | `true` | 再生状態の小バッジを表示する（要 `play`/`pause`/`record`/`stop` アセット） |
@@ -128,6 +128,7 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 | `{bpm}` | テンポ（例 `128 BPM`。テンポ無しなら空） |
 | `{srate}` | サンプルレート（例 `48kHz`。`reaper.GetSetProjectInfo` 由来） |
 | `{bufsize}` | オーディオブロックサイズ（例 `128 spls`）。ReaScript APIが無いため `reaper.ini` のASIO設定から読む＝**環境設定を保存した時点で更新**（実行中の変更は即時反映されない） |
+| `{latency}` | 入出力レイテンシ（例 `2.2/3.0ms`。`reaper.GetInputOutputLatency` 由来） |
 
 値が空のプレースホルダは消えます。区切りに **`·`（中黒）** を使うと、空セグメントの前後の `·` も自動で消えてきれいに詰まります（例: テンポ無しの `{emoji} {fxOrTransport} · {bpm}` → `▶️ Serum`）。`·` 以外の区切りは自動では消えません。
 
