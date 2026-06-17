@@ -1,177 +1,156 @@
-# REAPER Discord Rich Presence (Node 不要 / Go 単体 exe)
+# REAPER → Discord Rich Presence
 
-> Show your REAPER session as a Discord Rich Presence — no Node.js, no user
-> token, just a single static Go `.exe` plus one small REAPER Lua script.
-> The version line mirrors REAPER's own title bar.
+REAPER を起動している間、Discord のプロフィールに「いま REAPER で作業中」というステータスを表示するツールです。Node.js もユーザートークンも使わず、**Go 製の単体 `.exe` ひとつ**と小さな **REAPER Lua スクリプト**だけで動きます。
 
-REAPER を起動するだけで、Discord のプロフィールに
+![license](https://img.shields.io/github/license/satomasahiro2005/reaper-discord-presence)
+![release](https://img.shields.io/github/v/release/satomasahiro2005/reaper-discord-presence)
+![platform](https://img.shields.io/badge/platform-Windows-blue)
+
+## 特長
+
+- **Node 不要。** 配布物は単体 exe と Lua スクリプトだけ。常駐するのは exe ひとつです。
+- **公式の Rich Presence IPC のみ。** ユーザートークンや self-bot は一切使いません。
+- **タイトルバー連動。** バージョン行は REAPER のタイトルバーをそのまま読み取るので、ライセンス表記まで自動で反映されます。
+- **起動も終了も自動。** REAPER を起動すれば表示され、閉じれば数秒で消えます。一定時間操作がなければ自動で非表示にもできます。
+- **選択トラックのプラグインを表示。** 選択中トラックの先頭 FX 名（例: Serum）を出します。よく使う VST は専用アイコンや配布ページへのボタンに登録できます。
+- **プライバシー配慮。** プロジェクトのファイル名は送信も表示もしません。
+
+## 表示例
 
 ```
 Playing REAPER
 REAPER v7.74 -Licensed for personal/small business use
-▶️ Playing · 128 BPM
+▶️ Serum · 128 BPM
 ```
 
-を REAPER アイコン + 経過時間つきで表示します。**Node.js / npm は一切不要**で、**プロジェクトのファイル名は送信も表示もしません**。
+3 行目は「再生状態の絵文字 + 選択トラックの先頭 FX（無ければ再生状態の語）+ テンポ」です（▶️ Playing / ⏸️ Paused / ⏺️ Recording / ⏹️ Stopped）。これに REAPER アイコン（または登録 VST のアイコン）・経過時間・ボタンが付きます。
 
-## 何が動的に変わって、何が固定か
+## 仕組み
 
-| 表示 | 中身 | 動的？ |
-|------|------|--------|
-| 1行目 `Playing REAPER` | `Playing`＝activity type、`REAPER`＝**Discord App 名（固定）** | ❌ App名は固定。動詞は Playing/Listening/Watching/Competing のみ切替可（任意文字列は不可） |
-| 2行目 | REAPER のタイトルバー（`REAPER v7.74 -Licensed ...`）を実際に読んで表示 | ✅ バージョン/ライセンスが変われば自動追従 |
-| 3行目 | `<状態絵文字> <再生状態> · <テンポ> BPM`（例 `▶️ Playing · 128 BPM`） | ✅ 再生/停止/録音・テンポで変化 |
-| 大画像 | Art Asset キー `reaper` の画像（REAPER アイコン推奨） | 固定 |
-| 小バッジ | 再生状態に応じた `play`/`pause`/`record`/`stop` 画像（任意・未アップロードなら非表示） | ✅ |
-| 経過時間 | このセッション開始からの `for HH:MM` | ✅ |
-| ボタン | `Get REAPER` など（**他人にだけ見える**・config で変更/削除可） | 固定 |
-
-つまり **「〜をプレイ中（Playing REAPER）」の "REAPER" 部分は Discord の Application 名そのもの**で、1つの App では動的に変えられません（変えたいなら App を複数用意して `clientId` を切り替えるしかない）。動的情報は2〜3行目・小バッジ・経過時間に出ます。
-
-## 構成
+REAPER 側（Lua）は状態を JSON に書き出すだけで、Discord との通信は exe が担当します。両者は 1 つの JSON ファイルを介して疎結合になっています。
 
 ```
 REAPER 起動
-  └─ Scripts/__startup.lua
-       └─ dofile  Scripts/reaper_discord_presence.lua
-            ├─ REAPER の状態を JSON に書き出す（2秒ごと, ハートビート兼用）
-            │     %APPDATA%\REAPER\reaper_discord_presence.json
-            └─ Scripts/reaper-discord-presence.exe を1回だけ起動
-
-reaper-discord-presence.exe（Go 製・単体 exe・常駐）
-  ├─ 上記 JSON を監視
-  ├─ Discord ローカル IPC (\\.\pipe\discord-ipc-N) へ接続
-  ├─ Rich Presence を更新
-  └─ JSON が一定時間更新されない＝REAPER 終了 → Presence を消す
+└─ Scripts/__startup.lua
+   └─ reaper_discord_presence.lua      … 2 秒ごとに状態を JSON へ書き出し、exe を 1 度だけ起動
+      └─ %APPDATA%\REAPER\reaper_discord_presence.json
+         └─ reaper-discord-presence.exe … JSON を監視し、Discord のローカル IPC へ送信
 ```
 
-- Lua は **状態の書き出しだけ**を担当。Discord には一切触れない。
-- 送信役の常駐プロセスは Discord の仕様上どうしても必要（RPC over IPC はネイティブアプリ向けにローカル IPC で送る仕組み）。それを Go の単体 exe で最小化している。
-- **ユーザートークン方式 / self-bot は使わない。** 公式の Rich Presence IPC のみ。
+Discord の Rich Presence は、デスクトップ版クライアントのローカル IPC へ送る仕組みです。そのため送信役の常駐プロセスがどうしても必要になりますが、本ツールではそれを最小限の Go 製 exe に収めています。
+
+JSON ファイルの更新時刻（mtime）を生存確認に使い、一定時間更新が途絶えたら「REAPER が終了した」とみなして表示を消します。
 
 ## 必要なもの
 
 - Windows 10 / 11
-- Discord デスクトップ版（起動していること）
-- REAPER（リソースパス: `%APPDATA%\REAPER`）
-- Discord Developer Portal で作成した Application 1つ
+- Discord デスクトップ版（ブラウザ版は IPC 非対応）
+- REAPER
+- Discord Developer Portal で作成した Application（1 つ）
 
-## セットアップ手順
+## セットアップ
 
-### 1. Discord Developer Portal で Application を作る
+### 1. Discord Application を作る
 
-1. https://discord.com/developers/applications を開く。
-2. **New Application** → 名前を `REAPER` にする。
-   - ここで付けた**名前がそのまま `Playing REAPER` の "REAPER" 部分**になる。
-3. 左メニュー **General Information** の **Application ID** をコピーしておく（数字の長い ID）。
-4. 左メニュー **Rich Presence → Art Assets** を開き、画像をアップロードする。
-   - **大画像**: キーを `reaper`（小文字）にして REAPER アイコンをアップロード。
-     - REAPER 本体から抜き出した 512×512 PNG を使えます（`reaper.exe` のアイコンを抽出・アップスケールしたもの）。
-   - **小バッジ（任意）**: 再生状態のバッジを出したいなら、キー `play` / `pause` / `record` / `stop` で 4 枚アップロード。未アップロードなら小バッジは出ないだけ（エラーにはならない）。
-   - 推奨: 512×512 以上の PNG。アップロード反映には数分かかることがある。
+[Discord Developer Portal](https://discord.com/developers/applications) で **New Application** を作り、名前を `REAPER` にします。この **App 名がそのまま「Playing REAPER」の "REAPER" 部分**になります。作成後、**General Information** にある **Application ID** を控えておきます。
 
-### 2. Application ID を設定する
+### 2. 画像を登録する
 
-ビルド／配置後、初回起動時に
+**Rich Presence → Art Assets** で画像をアップロードします。
 
-```
-%APPDATA%\REAPER\reaper_discord_presence_config.json
-```
+- **大画像**: キーを `reaper`（小文字）にして REAPER アイコンを登録します。
+- **状態バッジ（任意）**: キー `play` / `pause` / `record` / `stop` の 4 枚を登録すると、再生状態に応じた小さなバッジが付きます。登録しなくても問題ありません（バッジが出ないだけ）。
 
-が自動生成されます。これを開き、`clientId` を手順1でコピーした Application ID に書き換えてください。
+いずれも 512×512 以上の PNG を推奨します。アップロードの反映には数分かかることがあります。
 
-```json
-{
-  "clientId": "ここに Application ID",
-  "largeImageKey": "reaper",
-  "largeImageText": "",
-  "pollIntervalMs": 2000,
-  "staleAfterMs": 10000,
-  "showTransportState": true,
-  "showBpm": true,
-  "showElapsed": true,
-  "smallImageByTransport": true,
-  "button1Label": "Get REAPER",
-  "button1Url": "https://www.reaper.fm/",
-  "button2Label": "",
-  "button2Url": ""
-}
-```
+### 3. exe を入手する
 
-### 3. exe を入手（ダウンロード or ビルド）
+- **ダウンロード:** [Releases](../../releases) から `reaper-discord-presence.exe` を入手します。
+- **自分でビルド:** [Go](https://go.dev/dl/) を入れて `./build.ps1` を実行します。コンソール窓の出ない、完全静的な単体 exe が生成されます。
 
-**A. ダウンロード（簡単）:** [Releases](../../releases) からプリビルドの `reaper-discord-presence.exe` を入手。
+### 4. 配置する
 
-**B. 自分でビルド:** [Go](https://go.dev/dl/) を入れて:
-
-```powershell
-cd reaper-discord-presence
-./build.ps1
-```
-
-`reaper-discord-presence.exe` が生成されます（コンソール窓が出ない GUI サブシステム build・完全静的）。
-
-### 4. 配置
-
-以下を REAPER の Scripts フォルダへコピー:
+次の 2 ファイルを REAPER の Scripts フォルダにコピーします。
 
 ```
 %APPDATA%\REAPER\Scripts\reaper-discord-presence.exe
 %APPDATA%\REAPER\Scripts\reaper_discord_presence.lua
 ```
 
-そして `%APPDATA%\REAPER\Scripts\__startup.lua` の末尾に次の1行を追記（既存内容は消さない）:
+続いて `%APPDATA%\REAPER\Scripts\__startup.lua` の末尾に次の 1 行を追記します（既存の内容は消さないでください）。
 
 ```lua
 dofile(reaper.GetResourcePath() .. "/Scripts/reaper_discord_presence.lua")
 ```
 
-### 5. 動作確認
+### 5. 設定する
 
-1. Discord デスクトップ版を起動。
-2. REAPER を起動（または再起動）。
-3. 数秒後、Discord のプロフィールに `Playing REAPER` が出る。
-4. 再生 / 停止 / 録音、テンポ変更で 3 行目の表示が変わる。
-5. REAPER を閉じると数秒後に Presence が消える。
+初回起動時に `%APPDATA%\REAPER\reaper_discord_presence_config.json` が自動生成されます。`clientId` を手順 1 の Application ID に書き換えてください。各項目は[設定リファレンス](#設定リファレンス)を参照。
 
-## 設定項目
+### 6. 動作を確認する
 
-| キー | 意味 |
-|------|------|
-| `clientId` | Discord Application ID（必須） |
-| `largeImageKey` | 大画像の Art Asset キー（`reaper`） |
-| `largeImageText` | 画像ホバー時のテキスト（空ならタイトルバー文字列を自動使用） |
-| `pollIntervalMs` | JSON を確認する間隔（既定 2000） |
-| `staleAfterMs` | この時間 JSON が更新されないと REAPER 終了とみなす（既定 10000） |
-| `showTransportState` | 再生/停止/録音状態を表示するか |
-| `showBpm` | プロジェクトのテンポ（BPM）を表示するか |
-| `showElapsed` | 経過時間（for HH:MM）を表示するか |
-| `smallImageByTransport` | 再生状態の小バッジ（`play`/`pause`/`record`/`stop`）を出すか |
-| `button1Label` / `button1Url` | ボタン1（他人にだけ見える）。空で非表示 |
-| `button2Label` / `button2Url` | ボタン2（他人にだけ見える）。空で非表示 |
+Discord デスクトップ版と REAPER を起動します。数秒後、Discord のプロフィールに `Playing REAPER` が表示されます。再生・停止・録音やテンポの変更で 3 行目が変わり、REAPER を閉じると数秒で表示が消えます。
 
+## 設定リファレンス
+
+| キー | 既定値 | 説明 |
+|------|--------|------|
+| `clientId` | — | Discord Application ID（**必須**） |
+| `largeImageKey` | `reaper` | 大画像の Art Asset キー |
+| `largeImageText` | `""` | 画像ホバー時の文字。空ならタイトルバー文字列を自動使用 |
+| `pollIntervalMs` | `2000` | 状態 JSON を確認する間隔（ミリ秒） |
+| `staleAfterMs` | `10000` | JSON がこの時間更新されないと REAPER 終了とみなす（ミリ秒） |
+| `hideAfterIdleMs` | `300000` | この時間 REAPER を操作しないと自動で非表示（5 分）。`0` で無効 |
+| `showTransportState` | `true` | 再生 / 停止 / 録音状態（絵文字）を表示する |
+| `showBpm` | `true` | プロジェクトのテンポ（BPM）を表示する |
+| `showFx` | `true` | 選択トラックの先頭 FX 名を 3 行目に表示する |
+| `showElapsed` | `true` | 経過時間（for HH:MM）を表示する |
+| `smallImageByTransport` | `true` | 再生状態の小バッジを表示する（要 `play`/`pause`/`record`/`stop` アセット） |
+| `vsts` | `[]` | プラグイン登録表（下記参照） |
+| `button1Label` / `button1Url` | `Get REAPER` / reaper.fm | ボタン 1。空にすると非表示 |
+| `button2Label` / `button2Url` | `""` | ボタン 2。空にすると非表示 |
+
+> ボタンは Discord の仕様上、**自分には表示されず、プロフィールを見た他人にだけ**表示されます（アイコンや 3 行目は自分にも見えます）。
 > プロジェクトのファイル名は仕様として一切送信・表示しません。
+
+### プラグイン登録（`vsts`）
+
+選択トラックの先頭 FX が登録した名前を含むとき、専用アイコン（小バッジ）と配布ページへのボタンを出せます。
+
+```json
+"vsts": [
+  { "match": "Serum", "label": "Serum", "imageKey": "serum", "downloadUrl": "https://xferrecords.com/products/serum" }
+]
+```
+
+| フィールド | 説明 |
+|------|------|
+| `match` | FX 名に含まれていれば一致（大文字小文字無視） |
+| `label` | 3 行目に表示する名前 |
+| `imageKey` | 小バッジに使う Art Asset キー（その VST のロゴを別途アップロード）。省略可 |
+| `downloadUrl` | ボタン 2 を「Get &lt;label&gt;」としてこの URL に。省略可 |
+
+一致したときは、小バッジは登録アイコン優先（無ければ再生状態バッジ）、ボタン 2 はその VST の配布リンクになります。
 
 ## トラブルシューティング
 
-- **何も出ない**
-  - Discord の **設定 → アクティビティのプライバシー → 「現在のアクティビティをステータスメッセージとして表示」** がオンか確認。
-  - Discord デスクトップ版が起動しているか（ブラウザ版は IPC 非対応）。
-  - `clientId` が正しく入っているか。
-  - ログを確認: `%APPDATA%\REAPER\reaper_discord_presence.log`
-- **画像が出ない / デフォルト画像になる**
-  - Art Asset のキーが `reaper`（小文字）か。アップロード直後は反映に数分かかる。
-- **表示が消えない / REAPER 終了後も残る**
-  - `staleAfterMs` を短くする。
-- **二重に起動してしまう不安**
-  - exe は単一インスタンスを保証しているので、Lua が毎回起動しても二重常駐しない。
+**表示が出ない**
+- Discord デスクトップ版が起動しているか確認してください（ブラウザ版は不可）。
+- `clientId` が正しく設定されているか確認してください。
+- 他人に見せたい場合は、Discord の **設定 → アクティビティのプライバシー →「現在のアクティビティをステータスメッセージとして表示」** を ON にします。
+- 動作ログ `%APPDATA%\REAPER\reaper_discord_presence.log` を確認してください。
+
+**画像が出ない / デフォルト画像になる**
+- Art Asset のキーが `reaper`（小文字）か確認してください。アップロード直後は反映に数分かかります。
+
+**操作していると消える / 残る**
+- しばらく操作しないと消えるのは仕様です（`hideAfterIdleMs`）。無効にするなら `0`、長くするなら値を大きくしてください。
+- 終了後に消えないときは `staleAfterMs` を短くしてください。
 
 ## ログ
 
-GUI サブシステムでビルドしているためコンソール出力はありません。代わりに
+GUI サブシステムでビルドしているためコンソール出力はありません。代わりに `%APPDATA%\REAPER\reaper_discord_presence.log` に動作ログを書き出します。
 
-```
-%APPDATA%\REAPER\reaper_discord_presence.log
-```
+## ライセンス
 
-に動作ログを書き出します。
+[MIT](LICENSE)

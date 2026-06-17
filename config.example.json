@@ -4,10 +4,26 @@
   "largeImageText": "",
   "pollIntervalMs": 2000,
   "staleAfterMs": 10000,
+  "hideAfterIdleMs": 300000,
   "showTransportState": true,
   "showBpm": true,
+  "showFx": true,
   "showElapsed": true,
   "smallImageByTransport": true,
+  "vsts": [
+    {
+      "match": "Serum",
+      "label": "Serum",
+      "imageKey": "serum",
+      "downloadUrl": "https://xferrecords.com/products/serum"
+    },
+    {
+      "match": "Pianoteq",
+      "label": "Pianoteq",
+      "imageKey": "pianoteq",
+      "downloadUrl": "https://www.modartt.com/pianoteq"
+    }
+  ],
   "button1Label": "Get REAPER",
   "button1Url": "https://www.reaper.fm/",
   "button2Label": "",

@@ -57,12 +57,27 @@ local function launch_daemon()
   os.execute('start "" "' .. exe_path .. '"')
 end
 
+-- Raw name of the top FX (slot 0) on the first selected track, "" if none.
+local function top_fx_name()
+  local track = reaper.GetSelectedTrack(0, 0)
+  if not track then return "" end
+  if reaper.TrackFX_GetCount(track) < 1 then return "" end
+  local _, name = reaper.TrackFX_GetFXName(track, 0, "")
+  return name or ""
+end
+
 -- ---------------------------------------------------------------------------
 -- main deferred loop
 -- ---------------------------------------------------------------------------
 
 local POLL_SECONDS = 2.0
 local next_run = 0.0
+
+-- Idle tracking: the fingerprint changes whenever the user plays, moves the
+-- edit cursor, or edits the project. When it stops changing, idle time grows
+-- and the daemon can hide the presence.
+local last_fingerprint = nil
+local last_activity = reaper.time_precise()
 
 local function loop()
   local now = reaper.time_precise()
@@ -73,12 +88,27 @@ local function loop()
     local state     = reaper.GetPlayState()
     local transport = transport_name(state)
     local bpm       = reaper.Master_GetTempo()         -- project tempo, e.g. 120.0
+    local fx        = top_fx_name()
+
+    local fingerprint = string.format("%d|%.3f|%.3f|%d|%s",
+      state,
+      reaper.GetPlayPosition(),                -- moves continuously while playing
+      reaper.GetCursorPosition(),              -- moves when the edit cursor moves
+      reaper.GetProjectStateChangeCount(0),    -- increments on any edit
+      fx)
+    if fingerprint ~= last_fingerprint then
+      last_fingerprint = fingerprint
+      last_activity = now
+    end
+    local idle = now - last_activity
 
     local json = string.format(
-      '{"app":"REAPER","version":"%s","transport":"%s","bpm":%.3f,"timestamp":%.3f}',
+      '{"app":"REAPER","version":"%s","transport":"%s","bpm":%.3f,"fx":"%s","idleSeconds":%.1f,"timestamp":%.3f}',
       json_escape(version),
       json_escape(transport),
       bpm,
+      json_escape(fx),
+      idle,
       now
     )
 

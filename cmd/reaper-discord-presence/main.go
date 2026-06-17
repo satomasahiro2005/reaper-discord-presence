@@ -45,6 +45,16 @@ var errHandshakeRejected = errors.New("handshake rejected")
 // config & status
 // ---------------------------------------------------------------------------
 
+// VstEntry registers a plugin so that, when it is the top FX on the selected
+// track, the presence can show its own icon and a download button. Match is a
+// case-insensitive substring tested against REAPER's raw FX name.
+type VstEntry struct {
+	Match       string `json:"match"`
+	Label       string `json:"label"`       // shown on line 3 instead of the raw name
+	ImageKey    string `json:"imageKey"`    // small-badge art-asset key (optional)
+	DownloadUrl string `json:"downloadUrl"` // becomes button 2 (optional)
+}
+
 type Config struct {
 	ClientID       string `json:"clientId"`
 	LargeImageKey  string `json:"largeImageKey"`
@@ -52,17 +62,27 @@ type Config struct {
 	PollIntervalMs int    `json:"pollIntervalMs"`
 	StaleAfterMs   int    `json:"staleAfterMs"`
 
+	// HideAfterIdleMs clears the presence after this much REAPER inactivity
+	// (no playback, cursor move, or edit). 0 disables idle-hiding.
+	HideAfterIdleMs int `json:"hideAfterIdleMs"`
+
 	ShowTransportState bool `json:"showTransportState"`
 	ShowBpm            bool `json:"showBpm"`
+	ShowFx             bool `json:"showFx"` // show the selected track's top FX on line 3
 	ShowElapsed        bool `json:"showElapsed"`
 
 	// SmallImageByTransport overlays a small badge keyed by transport state on
 	// the large image. Requires art assets keyed "play"/"pause"/"record"/"stop"
 	// in the Developer Portal; if they're missing the badge is silently skipped.
+	// A matched VST's ImageKey takes priority over the transport badge.
 	SmallImageByTransport bool `json:"smallImageByTransport"`
 
+	// Registered plugins (see VstEntry).
+	Vsts []VstEntry `json:"vsts"`
+
 	// Up to two profile buttons (visible to OTHER users viewing your profile).
-	// Leave a label/url empty to omit that button.
+	// Leave a label/url empty to omit that button. A matched VST's DownloadUrl
+	// overrides button 2.
 	Button1Label string `json:"button1Label"`
 	Button1Url   string `json:"button1Url"`
 	Button2Label string `json:"button2Label"`
@@ -71,14 +91,16 @@ type Config struct {
 
 func defaultConfig() Config {
 	return Config{
-		ClientID:       "YOUR_DISCORD_APPLICATION_ID",
-		LargeImageKey:  "reaper",
-		LargeImageText: "", // empty -> auto (REAPER title-bar text)
-		PollIntervalMs: 2000,
-		StaleAfterMs:   10000,
+		ClientID:        "YOUR_DISCORD_APPLICATION_ID",
+		LargeImageKey:   "reaper",
+		LargeImageText:  "", // empty -> auto (REAPER title-bar text)
+		PollIntervalMs:  2000,
+		StaleAfterMs:    10000,
+		HideAfterIdleMs: 300000, // 5 min of inactivity hides the presence; 0 disables
 
 		ShowTransportState:    true,
 		ShowBpm:               true,
+		ShowFx:                true,
 		ShowElapsed:           true,
 		SmallImageByTransport: true,
 
@@ -119,11 +141,13 @@ func (c Config) clientIDValid() bool {
 }
 
 type Status struct {
-	App       string  `json:"app"`
-	Version   string  `json:"version"`
-	Transport string  `json:"transport"`
-	Bpm       float64 `json:"bpm"`
-	Timestamp float64 `json:"timestamp"`
+	App         string  `json:"app"`
+	Version     string  `json:"version"`
+	Transport   string  `json:"transport"`
+	Bpm         float64 `json:"bpm"`
+	Fx          string  `json:"fx"`          // raw name of the top FX on the selected track
+	IdleSeconds float64 `json:"idleSeconds"` // seconds since the last REAPER activity
+	Timestamp   float64 `json:"timestamp"`
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +371,36 @@ func formatBpm(b float64) string {
 	return strconv.FormatFloat(b, 'f', -1, 64)
 }
 
+// cleanFxName turns REAPER's raw FX name into a friendly plugin name:
+// "VSTi: Serum (Xfer Records)" -> "Serum", "JS: ReaEQ" -> "ReaEQ".
+func cleanFxName(raw string) string {
+	name := raw
+	if i := strings.Index(name, ": "); i >= 0 && i <= 9 { // strip "VST3i: " etc.
+		name = name[i+2:]
+	}
+	if strings.HasSuffix(name, ")") { // strip trailing " (vendor)"
+		if j := strings.LastIndex(name, " ("); j > 0 {
+			name = name[:j]
+		}
+	}
+	return strings.TrimSpace(name)
+}
+
+// matchVst returns the registered VST whose Match substring appears in the raw
+// FX name (case-insensitive), or nil.
+func matchVst(cfg Config, rawFx string) *VstEntry {
+	if rawFx == "" {
+		return nil
+	}
+	lower := strings.ToLower(rawFx)
+	for i := range cfg.Vsts {
+		if cfg.Vsts[i].Match != "" && strings.Contains(lower, strings.ToLower(cfg.Vsts[i].Match)) {
+			return &cfg.Vsts[i]
+		}
+	}
+	return nil
+}
+
 // buildActivity turns a status + config into a Discord activity, plus a dedupe
 // key (the meaningful, timestamp-independent content) used to avoid resending
 // an unchanged presence.
@@ -365,19 +419,29 @@ func buildActivity(cfg Config, st Status, sessionStart int64) (*activity, string
 	}
 
 	emoji, word, smallKey := transportInfo(st.Transport)
+	matched := matchVst(cfg, st.Fx)
 
-	// Line 3 (state): transport + tempo. Deliberately NO project file name.
+	// Line 3 (state): <transport emoji> <top FX / registered VST / transport> · <BPM>.
+	// Deliberately NO project file name.
+	label := ""
+	if cfg.ShowFx {
+		if matched != nil && matched.Label != "" {
+			label = matched.Label
+		} else {
+			label = cleanFxName(st.Fx)
+		}
+	}
+	if label == "" {
+		label = word // no FX (or showFx off) -> fall back to the transport word
+	}
 	var state string
 	if cfg.ShowTransportState {
-		state = emoji + " " + word
+		state = emoji + " " + label
+	} else {
+		state = label
 	}
 	if cfg.ShowBpm && st.Bpm > 0 {
-		bpm := formatBpm(st.Bpm) + " BPM"
-		if state != "" {
-			state += " · " + bpm
-		} else {
-			state = bpm
-		}
+		state += " · " + formatBpm(st.Bpm) + " BPM"
 	}
 
 	// Large image hover text: the title-bar string, falling back to the config.
@@ -386,11 +450,12 @@ func buildActivity(cfg Config, st Status, sessionStart int64) (*activity, string
 		largeText = details
 	}
 
-	ass := &assets{
-		LargeImage: cfg.LargeImageKey,
-		LargeText:  largeText,
-	}
-	if cfg.SmallImageByTransport {
+	// Small badge: a matched VST's icon wins; otherwise the transport badge.
+	ass := &assets{LargeImage: cfg.LargeImageKey, LargeText: largeText}
+	if matched != nil && matched.ImageKey != "" {
+		ass.SmallImage = matched.ImageKey
+		ass.SmallText = matched.Label
+	} else if cfg.SmallImageByTransport {
 		ass.SmallImage = smallKey // shows only if such an asset is uploaded
 		ass.SmallText = word
 	}
@@ -405,17 +470,29 @@ func buildActivity(cfg Config, st Status, sessionStart int64) (*activity, string
 		act.Timestamps = &timestamps{Start: sessionStart}
 	}
 
-	// Up to two buttons (shown to other users viewing your profile).
+	// Buttons (shown to OTHER users viewing your profile, not yourself).
 	if cfg.Button1Label != "" && cfg.Button1Url != "" {
 		act.Buttons = append(act.Buttons, button{Label: cfg.Button1Label, Url: cfg.Button1Url})
 	}
-	if cfg.Button2Label != "" && cfg.Button2Url != "" {
-		act.Buttons = append(act.Buttons, button{Label: cfg.Button2Label, Url: cfg.Button2Url})
+	// Button 2: a matched VST's download link overrides the configured button 2.
+	b2l, b2u := cfg.Button2Label, cfg.Button2Url
+	if matched != nil && matched.DownloadUrl != "" {
+		lbl := matched.Label
+		if lbl == "" {
+			lbl = "plugin"
+		}
+		b2l, b2u = "Get "+lbl, matched.DownloadUrl
+	}
+	if b2l != "" && b2u != "" {
+		if len(b2l) > 32 {
+			b2l = b2l[:32]
+		}
+		act.Buttons = append(act.Buttons, button{Label: b2l, Url: b2u})
 	}
 
 	key := strings.Join([]string{
 		details, state, ass.LargeImage, ass.LargeText, ass.SmallImage, ass.SmallText,
-		cfg.Button1Label, cfg.Button1Url, cfg.Button2Label, cfg.Button2Url,
+		cfg.Button1Label, cfg.Button1Url, b2l, b2u,
 	}, "\x00")
 	return act, key
 }
@@ -543,6 +620,25 @@ func main() {
 		var st Status
 		if err := json.Unmarshal(data, &st); err != nil {
 			// Possibly a partial write; try again next tick.
+			time.Sleep(pollInterval)
+			continue
+		}
+
+		// Idle auto-hide: REAPER is open but nothing has happened (no playback,
+		// cursor move, or edit) for a while -> clear the presence. We keep
+		// watching, so it reappears as soon as the user does something.
+		if cfg.HideAfterIdleMs > 0 && st.IdleSeconds*1000 >= float64(cfg.HideAfterIdleMs) {
+			if conn != nil && !cleared {
+				if err := setActivity(conn, nil); err != nil {
+					log.Printf("clear failed: %v", err)
+					closeConn()
+				} else {
+					log.Printf("idle %.0fs; hid presence", st.IdleSeconds)
+				}
+				lastSendTime = time.Now()
+			}
+			cleared = true
+			lastSentKey = ""
 			time.Sleep(pollInterval)
 			continue
 		}
