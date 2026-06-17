@@ -518,7 +518,7 @@ func matchVst(cfg Config, rawFx string) *VstEntry {
 // buildActivity turns a status + config into a Discord activity, plus a dedupe
 // key (the meaningful, timestamp-independent content) used to avoid resending
 // an unchanged presence.
-func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float64) (*activity, string) {
+func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float64, awayLabel string) (*activity, string) {
 	version := st.Version
 	if version == "" {
 		version = "?"
@@ -539,6 +539,9 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 		fxLabel = matched.Label
 	} else {
 		fxLabel = cleanFxName(st.Fx)
+	}
+	if awayLabel != "" {
+		fxLabel = awayLabel // away/idle: show the away text in the FX spot
 	}
 	fxOrTransport := fxLabel
 	if fxOrTransport == "" {
@@ -688,10 +691,9 @@ func buildAwayActivity(cfg Config, st Status, awayStart int64) (*activity, strin
 	if state == "" {
 		state = "Away"
 	}
-	largeText := renderTemplate(cfg.LargeImageText, vars)
-	if largeText == "" {
-		largeText = title
-	}
+	// No live audio info while away, so skip the (audio-oriented) largeImageText
+	// template — rendering it with empty values would produce junk like "[ : ~ ]".
+	largeText := ""
 	awayImg := cfg.AwayImageKey
 	if awayImg == "" {
 		awayImg = cfg.LargeImageKey
@@ -859,7 +861,7 @@ func main() {
 				awayStart = time.Now().UnixMilli()
 				log.Printf("away (idle %.0fs)", st.IdleSeconds)
 			}
-			act, key = buildAwayActivity(cfg, st, awayStart)
+			act, key = buildActivity(cfg, st, awayStart, deviceSrate, cfg.AwayText)
 		} else {
 			if away || sessionStart == 0 {
 				// Start the play timer on first appearance, and restart it (from
@@ -870,7 +872,7 @@ func main() {
 				away = false
 				sessionStart = time.Now().UnixMilli()
 			}
-			act, key = buildActivity(cfg, st, sessionStart, deviceSrate)
+			act, key = buildActivity(cfg, st, sessionStart, deviceSrate, "")
 		}
 
 		// Ensure a connection to Discord.
