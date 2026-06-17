@@ -97,6 +97,14 @@ local ini_srate, audio_bufsize = read_audio_ini()
 local POLL_SECONDS = 2.0
 local next_run = 0.0
 
+-- Daemon watchdog: the exe writes its Unix time to alive_path every poll. If that
+-- heartbeat goes stale/missing the daemon has died, so relaunch it — this revives
+-- the presence mid-session without needing a REAPER restart.
+local alive_path = res_path .. "/reaper_discord_presence_daemon.alive"
+local DAEMON_CHECK_SECONDS = 10   -- how often to check the heartbeat
+local HEARTBEAT_STALE_SECS = 12   -- daemon considered dead past this (~6 daemon polls)
+local next_daemon_check = 0.0
+
 -- Idle tracking: the fingerprint changes whenever the user plays, moves the
 -- edit cursor, or edits the project. When it stops changing, idle time grows
 -- and the daemon can hide the presence.
@@ -107,6 +115,22 @@ local function loop()
   -- Stop if a newer instance has started (single-instance guard).
   if reaper.GetExtState("reaper_discord_presence", "gen") ~= MY_GEN then return end
   local now = reaper.time_precise()
+
+  -- Watchdog: relaunch the daemon if its heartbeat is stale/missing (it died).
+  -- launch_daemon() is single-instance-guarded, so calling it while the daemon is
+  -- alive is a harmless no-op — no extra process, no console flash.
+  if now >= next_daemon_check then
+    next_daemon_check = now + DAEMON_CHECK_SECONDS
+    local dead = true
+    local hf = io.open(alive_path, "r")
+    if hf then
+      local v = tonumber(hf:read("*a"))
+      hf:close()
+      if v and (os.time() - v) <= HEARTBEAT_STALE_SECS then dead = false end
+    end
+    if dead then launch_daemon() end
+  end
+
   if now >= next_run then
     next_run = now + POLL_SECONDS
 

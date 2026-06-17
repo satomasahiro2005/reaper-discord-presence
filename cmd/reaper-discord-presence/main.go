@@ -712,6 +712,13 @@ func acquireSingleInstance(name string) bool {
 	return true
 }
 
+// touchHeartbeat writes the current Unix time to the heartbeat file. The Lua
+// watchdog reads its freshness to decide whether this daemon died and needs
+// relaunching, so it must be called on every main-loop iteration.
+func touchHeartbeat(path string) {
+	_ = os.WriteFile(path, []byte(strconv.FormatInt(time.Now().Unix(), 10)), 0o644)
+}
+
 // ---------------------------------------------------------------------------
 // main loop
 // ---------------------------------------------------------------------------
@@ -725,6 +732,7 @@ func main() {
 	statusPath := filepath.Join(resDir, "reaper_discord_presence.json")
 	configPath := filepath.Join(resDir, "reaper_discord_presence_config.json")
 	logPath := filepath.Join(resDir, "reaper_discord_presence.log")
+	heartbeatPath := filepath.Join(resDir, "reaper_discord_presence_daemon.alive")
 
 	// Single-instance check FIRST, before touching the log file: a rejected
 	// second instance must not truncate the running instance's log.
@@ -762,6 +770,10 @@ func main() {
 	}
 
 	for {
+		// Liveness heartbeat: the Lua watchdog relaunches this exe if the file
+		// goes stale, so it must be touched every iteration (in all branches).
+		touchHeartbeat(heartbeatPath)
+
 		cfg := loadConfig(configPath)
 		pollInterval := time.Duration(cfg.PollIntervalMs) * time.Millisecond
 		staleAfter := time.Duration(cfg.StaleAfterMs) * time.Millisecond
