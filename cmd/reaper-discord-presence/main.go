@@ -553,7 +553,7 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 	// no project file name is exposed to any placeholder.
 	bufsize := ""
 	if st.Bufsize > 0 {
-		bufsize = strconv.Itoa(st.Bufsize) + " spls"
+		bufsize = strconv.Itoa(st.Bufsize) + "spls"
 	}
 	bps := ""
 	if st.Bps > 0 {
