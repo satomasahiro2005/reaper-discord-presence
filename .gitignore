@@ -1,0 +1,13 @@
+# Build output (distributed via GitHub Releases, not committed)
+/reaper-discord-presence.exe
+*.exe
+
+# Local runtime artifacts (these live under %APPDATA%\REAPER, not here)
+reaper_discord_presence.json
+reaper_discord_presence.log
+reaper_discord_presence_config.json
+
+# OS junk
+Thumbs.db
+desktop.ini
+.DS_Store
