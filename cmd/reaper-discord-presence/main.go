@@ -46,26 +46,44 @@ var errHandshakeRejected = errors.New("handshake rejected")
 // ---------------------------------------------------------------------------
 
 type Config struct {
-	ClientID           string `json:"clientId"`
-	LargeImageKey      string `json:"largeImageKey"`
-	LargeImageText     string `json:"largeImageText"`
-	PollIntervalMs     int    `json:"pollIntervalMs"`
-	StaleAfterMs       int    `json:"staleAfterMs"`
-	ShowProjectName    bool   `json:"showProjectName"`
-	ShowTransportState bool   `json:"showTransportState"`
-	ShowElapsed        bool   `json:"showElapsed"`
+	ClientID       string `json:"clientId"`
+	LargeImageKey  string `json:"largeImageKey"`
+	LargeImageText string `json:"largeImageText"`
+	PollIntervalMs int    `json:"pollIntervalMs"`
+	StaleAfterMs   int    `json:"staleAfterMs"`
+
+	ShowTransportState bool `json:"showTransportState"`
+	ShowBpm            bool `json:"showBpm"`
+	ShowElapsed        bool `json:"showElapsed"`
+
+	// SmallImageByTransport overlays a small badge keyed by transport state on
+	// the large image. Requires art assets keyed "play"/"pause"/"record"/"stop"
+	// in the Developer Portal; if they're missing the badge is silently skipped.
+	SmallImageByTransport bool `json:"smallImageByTransport"`
+
+	// Up to two profile buttons (visible to OTHER users viewing your profile).
+	// Leave a label/url empty to omit that button.
+	Button1Label string `json:"button1Label"`
+	Button1Url   string `json:"button1Url"`
+	Button2Label string `json:"button2Label"`
+	Button2Url   string `json:"button2Url"`
 }
 
 func defaultConfig() Config {
 	return Config{
-		ClientID:           "YOUR_DISCORD_APPLICATION_ID",
-		LargeImageKey:      "reaper",
-		LargeImageText:     "REAPER",
-		PollIntervalMs:     2000,
-		StaleAfterMs:       10000,
-		ShowProjectName:    true,
-		ShowTransportState: true,
-		ShowElapsed:        true,
+		ClientID:       "YOUR_DISCORD_APPLICATION_ID",
+		LargeImageKey:  "reaper",
+		LargeImageText: "", // empty -> auto (REAPER title-bar text)
+		PollIntervalMs: 2000,
+		StaleAfterMs:   10000,
+
+		ShowTransportState:    true,
+		ShowBpm:               true,
+		ShowElapsed:           true,
+		SmallImageByTransport: true,
+
+		Button1Label: "Get REAPER",
+		Button1Url:   "https://www.reaper.fm/",
 	}
 }
 
@@ -101,11 +119,11 @@ func (c Config) clientIDValid() bool {
 }
 
 type Status struct {
-	App         string  `json:"app"`
-	Version     string  `json:"version"`
-	ProjectName string  `json:"projectName"`
-	Transport   string  `json:"transport"`
-	Timestamp   float64 `json:"timestamp"`
+	App       string  `json:"app"`
+	Version   string  `json:"version"`
+	Transport string  `json:"transport"`
+	Bpm       float64 `json:"bpm"`
+	Timestamp float64 `json:"timestamp"`
 }
 
 // ---------------------------------------------------------------------------
@@ -123,12 +141,18 @@ type timestamps struct {
 	Start int64 `json:"start,omitempty"` // Unix time in MILLISECONDS (seconds -> bogus elapsed)
 }
 
+type button struct {
+	Label string `json:"label"`
+	Url   string `json:"url"`
+}
+
 type activity struct {
 	Type       int         `json:"type"` // 0 = Playing
 	Details    string      `json:"details,omitempty"`
 	State      string      `json:"state,omitempty"`
 	Timestamps *timestamps `json:"timestamps,omitempty"`
 	Assets     *assets     `json:"assets,omitempty"`
+	Buttons    []button    `json:"buttons,omitempty"`
 }
 
 // setActivityArgs is the SET_ACTIVITY command frame. Activity is a pointer so a
@@ -303,17 +327,24 @@ func readReaperTitle() string {
 	return found
 }
 
-func transportDisplay(t string) string {
+// transportInfo maps the transport state to a display emoji, a word, and the
+// art-asset key used for the small badge.
+func transportInfo(t string) (emoji, word, smallKey string) {
 	switch t {
 	case "recording":
-		return "Recording"
+		return "⏺️", "Recording", "record" // ⏺️
 	case "playing":
-		return "Playing"
+		return "▶️", "Playing", "play" // ▶️
 	case "paused":
-		return "Paused"
+		return "⏸️", "Paused", "pause" // ⏸️
 	default:
-		return "Stopped"
+		return "⏹️", "Stopped", "stop" // ⏹️
 	}
+}
+
+// formatBpm renders a tempo with the minimal digits ("120", "128.5").
+func formatBpm(b float64) string {
+	return strconv.FormatFloat(b, 'f', -1, 64)
 }
 
 // buildActivity turns a status + config into a Discord activity, plus a dedupe
@@ -333,35 +364,59 @@ func buildActivity(cfg Config, st Status, sessionStart int64) (*activity, string
 		details = "REAPER v" + version
 	}
 
+	emoji, word, smallKey := transportInfo(st.Transport)
+
+	// Line 3 (state): transport + tempo. Deliberately NO project file name.
 	var state string
-	if cfg.ShowProjectName && st.ProjectName != "" {
-		state = "Project: " + st.ProjectName
-		if cfg.ShowTransportState {
-			state += " / " + transportDisplay(st.Transport)
+	if cfg.ShowTransportState {
+		state = emoji + " " + word
+	}
+	if cfg.ShowBpm && st.Bpm > 0 {
+		bpm := formatBpm(st.Bpm) + " BPM"
+		if state != "" {
+			state += " · " + bpm
+		} else {
+			state = bpm
 		}
-	} else if cfg.ShowTransportState {
-		state = transportDisplay(st.Transport)
 	}
 
+	// Large image hover text: the title-bar string, falling back to the config.
 	largeText := cfg.LargeImageText
 	if largeText == "" {
-		largeText = "REAPER " + version
+		largeText = details
+	}
+
+	ass := &assets{
+		LargeImage: cfg.LargeImageKey,
+		LargeText:  largeText,
+	}
+	if cfg.SmallImageByTransport {
+		ass.SmallImage = smallKey // shows only if such an asset is uploaded
+		ass.SmallText = word
 	}
 
 	act := &activity{
 		Type:    0, // Playing
 		Details: details,
 		State:   state,
-		Assets: &assets{
-			LargeImage: cfg.LargeImageKey,
-			LargeText:  largeText,
-		},
+		Assets:  ass,
 	}
 	if cfg.ShowElapsed && sessionStart > 0 {
 		act.Timestamps = &timestamps{Start: sessionStart}
 	}
 
-	key := details + "\x00" + state + "\x00" + cfg.LargeImageKey + "\x00" + largeText
+	// Up to two buttons (shown to other users viewing your profile).
+	if cfg.Button1Label != "" && cfg.Button1Url != "" {
+		act.Buttons = append(act.Buttons, button{Label: cfg.Button1Label, Url: cfg.Button1Url})
+	}
+	if cfg.Button2Label != "" && cfg.Button2Url != "" {
+		act.Buttons = append(act.Buttons, button{Label: cfg.Button2Label, Url: cfg.Button2Url})
+	}
+
+	key := strings.Join([]string{
+		details, state, ass.LargeImage, ass.LargeText, ass.SmallImage, ass.SmallText,
+		cfg.Button1Label, cfg.Button1Url, cfg.Button2Label, cfg.Button2Url,
+	}, "\x00")
 	return act, key
 }
 

@@ -42,12 +42,8 @@ local function transport_name(state)
   return "stopped"
 end
 
--- Current project file name, e.g. "song.rpp" ("" when the project is unsaved).
--- reaper.GetProjectName returns the filename ONLY, as a single string; proj=0 is
--- the active project and the second argument is a required-but-ignored buffer.
-local function project_name()
-  return reaper.GetProjectName(0, "") or ""
-end
+-- NOTE: the project file name is intentionally NOT collected or written, so it
+-- never leaves this machine and never appears in the Discord presence.
 
 local function launch_daemon()
   local f = io.open(exe_path, "rb")
@@ -74,15 +70,15 @@ local function loop()
     next_run = now + POLL_SECONDS
 
     local version   = reaper.GetAppVersion()          -- e.g. "7.74/x64"
-    local project   = project_name()
     local state     = reaper.GetPlayState()
     local transport = transport_name(state)
+    local bpm       = reaper.Master_GetTempo()         -- project tempo, e.g. 120.0
 
     local json = string.format(
-      '{"app":"REAPER","version":"%s","projectName":"%s","transport":"%s","timestamp":%.3f}',
+      '{"app":"REAPER","version":"%s","transport":"%s","bpm":%.3f,"timestamp":%.3f}',
       json_escape(version),
-      json_escape(project),
       json_escape(transport),
+      bpm,
       now
     )
 

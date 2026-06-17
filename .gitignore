@@ -7,6 +7,9 @@ reaper_discord_presence.json
 reaper_discord_presence.log
 reaper_discord_presence_config.json
 
+# Locally-extracted REAPER icon (REAPER's trademark; not redistributed here)
+reaper-icon-512.png
+
 # OS junk
 Thumbs.db
 desktop.ini

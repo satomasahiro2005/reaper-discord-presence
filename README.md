@@ -9,23 +9,24 @@ REAPER を起動するだけで、Discord のプロフィールに
 ```
 Playing REAPER
 REAPER v7.74 -Licensed for personal/small business use
-Project: song.rpp / Playing
+▶️ Playing · 128 BPM
 ```
 
-を独自画像つきで表示します。**Node.js / npm は一切不要**です。
+を REAPER アイコン + 経過時間つきで表示します。**Node.js / npm は一切不要**で、**プロジェクトのファイル名は送信も表示もしません**。
 
 ## 何が動的に変わって、何が固定か
-
-Discord の表示は3行 + 画像です。動的に変わるのは**下2行**です。
 
 | 表示 | 中身 | 動的？ |
 |------|------|--------|
 | 1行目 `Playing REAPER` | `Playing`＝activity type、`REAPER`＝**Discord App 名（固定）** | ❌ App名は固定。動詞は Playing/Listening/Watching/Competing のみ切替可（任意文字列は不可） |
 | 2行目 | REAPER のタイトルバー（`REAPER v7.74 -Licensed ...`）を実際に読んで表示 | ✅ バージョン/ライセンスが変われば自動追従 |
-| 3行目 | `Project: <ファイル名> / <再生状態>` | ✅ プロジェクト・再生/停止/録音で変化 |
-| 大画像 | Art Asset キー `reaper` の画像 | 固定（任意で差し替え可） |
+| 3行目 | `<状態絵文字> <再生状態> · <テンポ> BPM`（例 `▶️ Playing · 128 BPM`） | ✅ 再生/停止/録音・テンポで変化 |
+| 大画像 | Art Asset キー `reaper` の画像（REAPER アイコン推奨） | 固定 |
+| 小バッジ | 再生状態に応じた `play`/`pause`/`record`/`stop` 画像（任意・未アップロードなら非表示） | ✅ |
+| 経過時間 | このセッション開始からの `for HH:MM` | ✅ |
+| ボタン | `Get REAPER` など（**他人にだけ見える**・config で変更/削除可） | 固定 |
 
-つまり **「〜をプレイ中（Playing REAPER）」の "REAPER" 部分は Discord の Application 名そのもの**で、1つの App では動的に変えられません（変えたいなら App を複数用意して `clientId` を切り替えるしかない）。代わりに、バージョン・プロジェクト名・再生状態といった**動的情報は2〜3行目**に出ます。
+つまり **「〜をプレイ中（Playing REAPER）」の "REAPER" 部分は Discord の Application 名そのもの**で、1つの App では動的に変えられません（変えたいなら App を複数用意して `clientId` を切り替えるしかない）。動的情報は2〜3行目・小バッジ・経過時間に出ます。
 
 ## 構成
 
@@ -64,9 +65,10 @@ reaper-discord-presence.exe（Go 製・単体 exe・常駐）
    - ここで付けた**名前がそのまま `Playing REAPER` の "REAPER" 部分**になる。
 3. 左メニュー **General Information** の **Application ID** をコピーしておく（数字の長い ID）。
 4. 左メニュー **Rich Presence → Art Assets** を開き、画像をアップロードする。
-   - ここで付けた **Asset 名（キー）を `reaper` にする**（小文字）。これが大きい画像になる。
-   - 推奨: 512×512 以上の PNG。
-   - アップロード反映には数分かかることがある。
+   - **大画像**: キーを `reaper`（小文字）にして REAPER アイコンをアップロード。
+     - REAPER 本体から抜き出した 512×512 PNG を使えます（`reaper.exe` のアイコンを抽出・アップスケールしたもの）。
+   - **小バッジ（任意）**: 再生状態のバッジを出したいなら、キー `play` / `pause` / `record` / `stop` で 4 枚アップロード。未アップロードなら小バッジは出ないだけ（エラーにはならない）。
+   - 推奨: 512×512 以上の PNG。アップロード反映には数分かかることがある。
 
 ### 2. Application ID を設定する
 
@@ -82,12 +84,17 @@ reaper-discord-presence.exe（Go 製・単体 exe・常駐）
 {
   "clientId": "ここに Application ID",
   "largeImageKey": "reaper",
-  "largeImageText": "REAPER",
+  "largeImageText": "",
   "pollIntervalMs": 2000,
   "staleAfterMs": 10000,
-  "showProjectName": true,
   "showTransportState": true,
-  "showElapsed": true
+  "showBpm": true,
+  "showElapsed": true,
+  "smallImageByTransport": true,
+  "button1Label": "Get REAPER",
+  "button1Url": "https://www.reaper.fm/",
+  "button2Label": "",
+  "button2Url": ""
 }
 ```
 
@@ -124,7 +131,7 @@ dofile(reaper.GetResourcePath() .. "/Scripts/reaper_discord_presence.lua")
 1. Discord デスクトップ版を起動。
 2. REAPER を起動（または再起動）。
 3. 数秒後、Discord のプロフィールに `Playing REAPER` が出る。
-4. 再生 / 停止 / 録音、プロジェクト切替で表示が変わる。
+4. 再生 / 停止 / 録音、テンポ変更で 3 行目の表示が変わる。
 5. REAPER を閉じると数秒後に Presence が消える。
 
 ## 設定項目
@@ -132,13 +139,18 @@ dofile(reaper.GetResourcePath() .. "/Scripts/reaper_discord_presence.lua")
 | キー | 意味 |
 |------|------|
 | `clientId` | Discord Application ID（必須） |
-| `largeImageKey` | Art Asset のキー（`reaper`） |
-| `largeImageText` | 画像ホバー時のテキスト |
+| `largeImageKey` | 大画像の Art Asset キー（`reaper`） |
+| `largeImageText` | 画像ホバー時のテキスト（空ならタイトルバー文字列を自動使用） |
 | `pollIntervalMs` | JSON を確認する間隔（既定 2000） |
 | `staleAfterMs` | この時間 JSON が更新されないと REAPER 終了とみなす（既定 10000） |
-| `showProjectName` | プロジェクト名を表示するか |
 | `showTransportState` | 再生/停止/録音状態を表示するか |
+| `showBpm` | プロジェクトのテンポ（BPM）を表示するか |
 | `showElapsed` | 経過時間（for HH:MM）を表示するか |
+| `smallImageByTransport` | 再生状態の小バッジ（`play`/`pause`/`record`/`stop`）を出すか |
+| `button1Label` / `button1Url` | ボタン1（他人にだけ見える）。空で非表示 |
+| `button2Label` / `button2Url` | ボタン2（他人にだけ見える）。空で非表示 |
+
+> プロジェクトのファイル名は仕様として一切送信・表示しません。
 
 ## トラブルシューティング
 

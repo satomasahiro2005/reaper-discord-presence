@@ -1,10 +1,15 @@
 {
   "clientId": "YOUR_DISCORD_APPLICATION_ID",
   "largeImageKey": "reaper",
-  "largeImageText": "REAPER",
+  "largeImageText": "",
   "pollIntervalMs": 2000,
   "staleAfterMs": 10000,
-  "showProjectName": true,
   "showTransportState": true,
-  "showElapsed": true
+  "showBpm": true,
+  "showElapsed": true,
+  "smallImageByTransport": true,
+  "button1Label": "Get REAPER",
+  "button1Url": "https://www.reaper.fm/",
+  "button2Label": "",
+  "button2Url": ""
 }
