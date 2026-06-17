@@ -2,6 +2,7 @@
   "clientId": "YOUR_DISCORD_APPLICATION_ID",
   "largeImageKey": "reaper",
   "largeImageText": "",
+  "activityType": "playing",
   "pollIntervalMs": 2000,
   "staleAfterMs": 60000,
   "awayAfterMs": 600000,

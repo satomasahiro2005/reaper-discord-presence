@@ -98,6 +98,7 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 | `clientId` | — | Discord Application ID（**必須**） |
 | `largeImageKey` | `reaper` | 大画像の Art Asset キー |
 | `largeImageText` | `""` | 画像ホバー時の文字。空ならタイトルバー文字列を自動使用 |
+| `activityType` | `playing` | 1 行目の動詞: `playing` / `listening`（→ Listening to）/ `watching` / `competing`。RPC はこの4つのみ |
 | `pollIntervalMs` | `2000` | 状態 JSON を確認する間隔（ミリ秒） |
 | `staleAfterMs` | `60000` | JSON がこの時間更新されないと REAPER 終了とみなす（ミリ秒）。VST 読込等で一時的に応答なしになっても消えないよう既定 60 秒。正常終了は即クリア（Lua の atexit が状態ファイルを消すため） |
 | `awayAfterMs` | `600000` | この時間 REAPER を操作しないと「離席中」表示に切替（10 分）。`0` で無効。戻ると経過時間が 0 にリセット |

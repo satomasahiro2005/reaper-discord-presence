@@ -59,6 +59,11 @@ type Config struct {
 	ClientID       string `json:"clientId"`
 	LargeImageKey  string `json:"largeImageKey"`
 	LargeImageText string `json:"largeImageText"`
+
+	// ActivityType is the first-line verb: playing | listening | watching |
+	// competing (Discord RPC only honors these four). e.g. "listening" shows
+	// "Listening to REAPER".
+	ActivityType string `json:"activityType"`
 	PollIntervalMs int    `json:"pollIntervalMs"`
 	StaleAfterMs   int    `json:"staleAfterMs"`
 
@@ -108,7 +113,8 @@ func defaultConfig() Config {
 	return Config{
 		ClientID:        "YOUR_DISCORD_APPLICATION_ID",
 		LargeImageKey:   "reaper",
-		LargeImageText:  "", // empty -> auto (REAPER title-bar text)
+		LargeImageText:  "",
+		ActivityType:    "playing", // empty -> auto (REAPER title-bar text)
 		PollIntervalMs:  2000,
 		StaleAfterMs:    60000, // tolerate ~60s of no updates (e.g. a VST-load hang) before treating REAPER as closed
 		AwayAfterMs:     600000, // 10 min of inactivity -> "away"; 0 disables
@@ -413,6 +419,21 @@ func formatLatency(inMs, outMs float64) string {
 	return strconv.FormatFloat(inMs, 'f', 1, 64) + "/" + strconv.FormatFloat(outMs, 'f', 1, 64) + "ms"
 }
 
+// activityType maps a verb name to the Discord activity type integer.
+// RPC only honors Playing(0), Listening(2), Watching(3), Competing(5).
+func activityType(s string) int {
+	switch strings.ToLower(s) {
+	case "listening":
+		return 2
+	case "watching":
+		return 3
+	case "competing":
+		return 5
+	default: // "playing" or empty
+		return 0
+	}
+}
+
 // shortVersion drops the "/x64" architecture suffix: "7.74/x64" -> "7.74".
 func shortVersion(v string) string {
 	if i := strings.IndexByte(v, '/'); i >= 0 {
@@ -588,7 +609,7 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 	}
 
 	act := &activity{
-		Type:    0, // Playing
+		Type:    activityType(cfg.ActivityType),
 		Details: details,
 		State:   state,
 		Assets:  ass,
@@ -661,7 +682,7 @@ func buildAwayActivity(cfg Config, st Status, awayStart int64) (*activity, strin
 		awayImg = cfg.LargeImageKey
 	}
 	act := &activity{
-		Type:    0,
+		Type:    activityType(cfg.ActivityType),
 		Details: details,
 		State:   state,
 		Assets:  &assets{LargeImage: awayImg, LargeText: largeText},
