@@ -63,7 +63,7 @@ type Config struct {
 	// ActivityType is the first-line verb: playing | listening | watching |
 	// competing (Discord RPC only honors these four). e.g. "listening" shows
 	// "Listening to REAPER".
-	ActivityType string `json:"activityType"`
+	ActivityType   string `json:"activityType"`
 	PollIntervalMs int    `json:"pollIntervalMs"`
 	StaleAfterMs   int    `json:"staleAfterMs"`
 
@@ -73,6 +73,12 @@ type Config struct {
 	AwayAfterMs  int    `json:"awayAfterMs"`
 	AwayText     string `json:"awayText"`     // line 3 while away (e.g. "Away")
 	AwayImageKey string `json:"awayImageKey"` // large image while away; empty -> largeImageKey
+
+	// ResetTimerOnAway controls the elapsed timer at the active<->idle boundary.
+	// true (default): going idle shows the idle duration, and returning restarts
+	// the active timer from 0. false: one continuous timer from the session start
+	// that keeps running through idle and back. Absent/null counts as true.
+	ResetTimerOnAway *bool `json:"resetTimerOnAway"`
 
 	// Deprecated alias for AwayAfterMs (kept so older configs still work).
 	HideAfterIdleMs int `json:"hideAfterIdleMs"`
@@ -109,16 +115,19 @@ type Config struct {
 	Button2Url   string `json:"button2Url"`
 }
 
+func boolPtr(b bool) *bool { return &b }
+
 func defaultConfig() Config {
 	return Config{
-		ClientID:        "YOUR_DISCORD_APPLICATION_ID",
-		LargeImageKey:   "reaper",
-		LargeImageText:  "",
-		ActivityType:    "playing", // empty -> auto (REAPER title-bar text)
-		PollIntervalMs:  2000,
-		StaleAfterMs:    60000, // tolerate ~60s of no updates (e.g. a VST-load hang) before treating REAPER as closed
-		AwayAfterMs:     600000, // 10 min of inactivity -> "away"; 0 disables
-		AwayText:        "Idle",
+		ClientID:         "YOUR_DISCORD_APPLICATION_ID",
+		LargeImageKey:    "reaper",
+		LargeImageText:   "",
+		ActivityType:     "playing", // empty -> auto (REAPER title-bar text)
+		PollIntervalMs:   2000,
+		StaleAfterMs:     60000,  // tolerate ~60s of no updates (e.g. a VST-load hang) before treating REAPER as closed
+		AwayAfterMs:      600000, // 10 min of inactivity -> "away"; 0 disables
+		AwayText:         "Idle",
+		ResetTimerOnAway: boolPtr(true),
 
 		DetailsFormat: "v{ver} · {srate} · {bufsize} · {latency}", // {ver}=version without /x64; use {version} to keep the arch, or {title} for the title bar
 		StateFormat:   "{emoji} {fxOrTransport} · {bpm}",
@@ -606,21 +615,40 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 		largeText = title
 	}
 
-	// Choose which art is large vs small. SwapImages puts the VST/transport icon
-	// big and REAPER as the small badge. The large-image caption is always
-	// largeText; the small-image hover shows the other label.
-	primaryImg := cfg.LargeImageKey       // REAPER
-	secondaryImg, secondaryText := "", "" // VST icon or transport badge
-	if matched != nil && matched.ImageKey != "" {
-		secondaryImg, secondaryText = matched.ImageKey, matched.Label
-	} else if cfg.SmallImageByTransport {
-		secondaryImg, secondaryText = smallKey, word
+	// Choose which art is large vs small. The large-image caption is always
+	// largeText (which in the "listening" layout surfaces as a visible line).
+	//
+	//   active:  SwapImages puts the FX/VST icon big and REAPER as the small badge.
+	//   idle:    always the away image (delaylama) big, no small badge — the FX
+	//            icon must never take over the large slot while away.
+	primaryImg := cfg.LargeImageKey // REAPER (large image)
+	if awayLabel != "" && cfg.AwayImageKey != "" {
+		primaryImg = cfg.AwayImageKey // idle/away uses its own large image (e.g. delaylama)
 	}
+	// Secondary (VST icon or transport badge) only exists in the active state.
+	secondaryImg, secondaryText := "", ""
+	if awayLabel == "" {
+		if matched != nil && matched.ImageKey != "" {
+			secondaryImg, secondaryText = matched.ImageKey, matched.Label
+		} else if cfg.SmallImageByTransport {
+			secondaryImg, secondaryText = smallKey, word
+		}
+	}
+	reaperImg := cfg.LargeImageKey // the REAPER art-asset key
 	ass := &assets{LargeText: largeText}
-	if cfg.SwapImages && secondaryImg != "" {
-		ass.LargeImage = secondaryImg // VST icon big
-		ass.SmallImage, ass.SmallText = primaryImg, secondaryText
-	} else {
+	switch {
+	case awayLabel != "":
+		// Idle: the away image (e.g. delaylama) big, plus a small REAPER badge so
+		// it still reads as REAPER. Skip the badge when there's no distinct away
+		// image (big and small would then be the same icon).
+		ass.LargeImage = primaryImg // awayImageKey, or reaperImg if unset
+		if cfg.AwayImageKey != "" {
+			ass.SmallImage, ass.SmallText = reaperImg, title
+		}
+	case cfg.SwapImages && secondaryImg != "":
+		ass.LargeImage = secondaryImg                    // FX/VST icon big
+		ass.SmallImage, ass.SmallText = reaperImg, title // REAPER as the small badge
+	default:
 		ass.LargeImage = primaryImg // REAPER big
 		ass.SmallImage, ass.SmallText = secondaryImg, secondaryText
 	}
@@ -659,61 +687,6 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 		details, state, ass.LargeImage, ass.LargeText, ass.SmallImage, ass.SmallText,
 		cfg.Button1Label, cfg.Button1Url, b2l, b2u,
 	}, "\x00")
-	return act, key
-}
-
-// buildAwayActivity is shown after AwayAfterMs of inactivity: the configured
-// away text on line 3 (no FX/BPM), with the timer counting the away duration.
-// The normal play timer is reset to 0 when the user comes back.
-func buildAwayActivity(cfg Config, st Status, awayStart int64) (*activity, string) {
-	version := st.Version
-	if version == "" {
-		version = "?"
-	}
-	title := readReaperTitle()
-	if title == "" {
-		title = "REAPER v" + version
-	}
-	vars := map[string]string{
-		"title": title, "version": version, "ver": shortVersion(version),
-		"emoji": "", "transport": "", "fx": "", "fxOrTransport": "", "bpm": "", "srate": "", "bufsize": "", "latency": "",
-		"bps": "", "channels": "", "driver": "",
-	}
-	detailsFmt := cfg.DetailsFormat
-	if detailsFmt == "" {
-		detailsFmt = "REAPER v{version}"
-	}
-	details := renderTemplate(detailsFmt, vars)
-	if details == "" {
-		details = title
-	}
-	state := cfg.AwayText
-	if state == "" {
-		state = "Away"
-	}
-	// No live audio info while away, so skip the (audio-oriented) largeImageText
-	// template — rendering it with empty values would produce junk like "[ : ~ ]".
-	largeText := ""
-	awayImg := cfg.AwayImageKey
-	if awayImg == "" {
-		awayImg = cfg.LargeImageKey
-	}
-	act := &activity{
-		Type:    activityType(cfg.ActivityType),
-		Details: details,
-		State:   state,
-		Assets:  &assets{LargeImage: awayImg, LargeText: largeText},
-	}
-	if cfg.ShowElapsed && awayStart > 0 {
-		act.Timestamps = &timestamps{Start: awayStart}
-	}
-	if cfg.Button1Label != "" && cfg.Button1Url != "" {
-		act.Buttons = append(act.Buttons, button{Label: cfg.Button1Label, Url: cfg.Button1Url})
-	}
-	if cfg.Button2Label != "" && cfg.Button2Url != "" {
-		act.Buttons = append(act.Buttons, button{Label: cfg.Button2Label, Url: cfg.Button2Url})
-	}
-	key := "AWAY\x00" + details + "\x00" + state + "\x00" + cfg.LargeImageKey
 	return act, key
 }
 
@@ -770,10 +743,10 @@ func main() {
 		conn         net.Conn
 		lastSentKey  string
 		lastSendTime time.Time // for the SET_ACTIVITY rate-limit debounce
-		cleared      = true     // nothing currently shown
-		sessionStart int64      // unix MILLIS the current play timer started; 0 when not running
-		away         bool       // currently showing the "away" status
-		awayStart    int64      // unix MILLIS the away period started
+		cleared      = true    // nothing currently shown
+		sessionStart int64     // unix MILLIS the current play timer started; 0 when not running
+		away         bool      // currently showing the "away" status
+		awayStart    int64     // unix MILLIS the away period started
 		curClientID  string
 		downLogged   bool   // throttle "Discord unreachable" logging
 		badIDLogged  bool   // throttle "set clientId" logging
@@ -853,6 +826,7 @@ func main() {
 		// or edit), show the "away" status instead of the normal one. Returning
 		// from away resets the play timer to 0.
 		isAway := cfg.AwayAfterMs > 0 && st.IdleSeconds*1000 >= float64(cfg.AwayAfterMs)
+		resetTimer := cfg.ResetTimerOnAway == nil || *cfg.ResetTimerOnAway // default true
 		var act *activity
 		var key string
 		if isAway {
@@ -861,17 +835,25 @@ func main() {
 				awayStart = time.Now().UnixMilli()
 				log.Printf("away (idle %.0fs)", st.IdleSeconds)
 			}
-			act, key = buildActivity(cfg, st, awayStart, deviceSrate, cfg.AwayText)
+			if sessionStart == 0 {
+				sessionStart = time.Now().UnixMilli() // started up already idle
+			}
+			// resetTimer: count the idle duration. Otherwise keep the original
+			// session timer running continuously through idle.
+			timerStart := awayStart
+			if !resetTimer {
+				timerStart = sessionStart
+			}
+			act, key = buildActivity(cfg, st, timerStart, deviceSrate, cfg.AwayText)
 		} else {
-			if away || sessionStart == 0 {
-				// Start the play timer on first appearance, and restart it (from
-				// 0) whenever the user comes back from away.
-				if away {
-					log.Printf("back from away; play timer reset")
-				}
-				away = false
+			if sessionStart == 0 {
+				sessionStart = time.Now().UnixMilli() // first appearance
+			} else if away && resetTimer {
+				// Came back from away and we reset at the boundary: restart from 0.
+				log.Printf("back from away; play timer reset")
 				sessionStart = time.Now().UnixMilli()
 			}
+			away = false
 			act, key = buildActivity(cfg, st, sessionStart, deviceSrate, "")
 		}
 

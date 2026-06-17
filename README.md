@@ -104,6 +104,7 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 | `awayAfterMs` | `600000` | この時間 REAPER を操作しないと「離席中」表示に切替（10 分）。`0` で無効。戻ると経過時間が 0 にリセット |
 | `awayText` | `Idle` | 離席中に 3 行目へ出す文言（例 `Idle` / `離席中`） |
 | `awayImageKey` | `""` | 離席中の大画像 Art Asset キー。空なら `largeImageKey` と同じ |
+| `resetTimerOnAway` | `true` | 経過時間の挙動。`true`: 離席に入ると離席時間を表示し、戻ると 0 から再スタート。`false`: 離席をまたいでセッション開始からの通算をそのまま出し続ける |
 | `detailsFormat` | `v{ver} · {srate} · {bufsize} · {latency}` | 2 行目のテンプレート（下記） |
 | `stateFormat` | `{emoji} {fxOrTransport} · {bpm}` | 3 行目のテンプレート（下記） |
 | `showElapsed` | `true` | 経過時間（for HH:MM）を表示する |

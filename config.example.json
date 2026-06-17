@@ -8,6 +8,7 @@
   "awayAfterMs": 600000,
   "awayText": "Idle",
   "awayImageKey": "",
+  "resetTimerOnAway": true,
   "detailsFormat": "v{ver} · {srate} · {bufsize} · {latency}",
   "stateFormat": "{fx} · {bpm}",
   "showElapsed": true,

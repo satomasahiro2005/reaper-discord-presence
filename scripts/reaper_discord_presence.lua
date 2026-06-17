@@ -102,6 +102,10 @@ local next_run = 0.0
 -- and the daemon can hide the presence.
 local last_fingerprint = nil
 local last_activity = reaper.time_precise()
+-- Newest *meaningful* MIDI input timestamp seen (housekeeping like Active Sensing
+-- is excluded). Persisted across ticks so it only advances on a real note/CC, not
+-- on the steady stream of system-realtime bytes many controllers always send.
+local last_midi_ts = 0
 
 local function loop()
   -- Stop if a newer instance has started (single-instance guard).
@@ -133,12 +137,24 @@ local function loop()
     local lat_in  = (srate > 0) and (inlat  / srate * 1000) or 0  -- ms
     local lat_out = (srate > 0) and (outlat / srate * 1000) or 0  -- ms
 
-    -- MIDI input counts as activity too, so playing a controller un-idles.
-    local midi_tok = "0"
+    -- MIDI input counts as activity too, so playing a controller un-idles. BUT
+    -- most hardware streams "housekeeping" messages forever even when the user
+    -- is doing nothing — Active Sensing (0xFE) every ~300ms, Timing Clock (0xF8)
+    -- and MTC quarter-frame (0xF1) when synced. Counting those would reset the
+    -- idle timer every tick, so we skip them and key only off the newest
+    -- meaningful event's timestamp (channel messages are 0x80-0xEF, never skipped).
     if reaper.MIDI_GetRecentInputEvent then
-      local mret, _, mts = reaper.MIDI_GetRecentInputEvent(0)
-      midi_tok = tostring(mret) .. ":" .. tostring(mts)
+      for i = 0, 255 do
+        local mret, mbuf, mts = reaper.MIDI_GetRecentInputEvent(i)
+        if (not mret) or mret == 0 or not mbuf or #mbuf == 0 then break end
+        local status = mbuf:byte(1)
+        if status ~= 0xF8 and status ~= 0xFE and status ~= 0xF1
+           and mts and mts > last_midi_ts then
+          last_midi_ts = mts
+        end
+      end
     end
+    local midi_tok = tostring(last_midi_ts)
     local fingerprint = string.format("%d|%.3f|%.3f|%d|%s|%s",
       state,
       reaper.GetPlayPosition(),                -- moves continuously while playing
