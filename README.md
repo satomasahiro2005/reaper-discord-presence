@@ -101,9 +101,8 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 | `pollIntervalMs` | `2000` | 状態 JSON を確認する間隔（ミリ秒） |
 | `staleAfterMs` | `10000` | JSON がこの時間更新されないと REAPER 終了とみなす（ミリ秒） |
 | `hideAfterIdleMs` | `300000` | この時間 REAPER を操作しないと自動で非表示（5 分）。`0` で無効 |
-| `showTransportState` | `true` | 再生 / 停止 / 録音状態（絵文字）を表示する |
-| `showBpm` | `true` | プロジェクトのテンポ（BPM）を表示する |
-| `showFx` | `true` | 選択トラックの先頭 FX 名を 3 行目に表示する |
+| `detailsFormat` | `{title}` | 2 行目のテンプレート（下記） |
+| `stateFormat` | `{emoji} {fxOrTransport} · {bpm}` | 3 行目のテンプレート（下記） |
 | `showElapsed` | `true` | 経過時間（for HH:MM）を表示する |
 | `smallImageByTransport` | `true` | 再生状態の小バッジを表示する（要 `play`/`pause`/`record`/`stop` アセット） |
 | `vsts` | `[]` | プラグイン登録表（下記参照） |
@@ -112,6 +111,27 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 
 > ボタンは Discord の仕様上、**自分には表示されず、プロフィールを見た他人にだけ**表示されます（アイコンや 3 行目は自分にも見えます）。
 > プロジェクトのファイル名は仕様として一切送信・表示しません。
+
+### 表示テンプレート（`detailsFormat` / `stateFormat`）
+
+2 行目・3 行目の中身は、`config.json` のテンプレート文字列を書き換えるだけで自由に変えられます。使えるプレースホルダ:
+
+| プレースホルダ | 中身 |
+|------|------|
+| `{title}` | REAPER のタイトルバー文字列（例 `REAPER v7.74 -Licensed ...`） |
+| `{version}` | バージョン（例 `7.74/x64`） |
+| `{emoji}` | 再生状態の絵文字（▶️ / ⏸️ / ⏺️ / ⏹️） |
+| `{transport}` | 再生状態の語（Playing / Paused / Recording / Stopped） |
+| `{fx}` | 選択トラックの先頭 FX 名（登録 VST なら登録名。無ければ空） |
+| `{fxOrTransport}` | `{fx}` があればそれ、無ければ `{transport}` |
+| `{bpm}` | テンポ（例 `128 BPM`。テンポ無しなら空） |
+
+値が空のプレースホルダは消えます。区切りに **`·`（中黒）** を使うと、空セグメントの前後の `·` も自動で消えてきれいに詰まります（例: テンポ無しの `{emoji} {fxOrTransport} · {bpm}` → `▶️ Serum`）。`·` 以外の区切りは自動では消えません。
+
+例:
+- `"stateFormat": "{transport} · {bpm}"` → `Playing · 128 BPM`
+- `"stateFormat": "{fx}"` → `Serum`
+- `"detailsFormat": "REAPER {version}"` → `REAPER 7.74/x64`
 
 ### プラグイン登録（`vsts`）
 

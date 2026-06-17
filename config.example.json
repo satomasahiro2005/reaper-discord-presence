@@ -5,24 +5,13 @@
   "pollIntervalMs": 2000,
   "staleAfterMs": 10000,
   "hideAfterIdleMs": 300000,
-  "showTransportState": true,
-  "showBpm": true,
-  "showFx": true,
+  "detailsFormat": "{title}",
+  "stateFormat": "{emoji} {fxOrTransport} · {bpm}",
   "showElapsed": true,
   "smallImageByTransport": true,
   "vsts": [
-    {
-      "match": "Serum",
-      "label": "Serum",
-      "imageKey": "serum",
-      "downloadUrl": "https://xferrecords.com/products/serum"
-    },
-    {
-      "match": "Pianoteq",
-      "label": "Pianoteq",
-      "imageKey": "pianoteq",
-      "downloadUrl": "https://www.modartt.com/pianoteq"
-    }
+    { "match": "Serum", "label": "Serum", "imageKey": "serum", "downloadUrl": "https://xferrecords.com/products/serum" },
+    { "match": "Vital", "label": "Vital", "imageKey": "vital", "downloadUrl": "https://vital.audio/" }
   ],
   "button1Label": "Get REAPER",
   "button1Url": "https://www.reaper.fm/",

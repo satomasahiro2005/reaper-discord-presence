@@ -66,10 +66,14 @@ type Config struct {
 	// (no playback, cursor move, or edit). 0 disables idle-hiding.
 	HideAfterIdleMs int `json:"hideAfterIdleMs"`
 
-	ShowTransportState bool `json:"showTransportState"`
-	ShowBpm            bool `json:"showBpm"`
-	ShowFx             bool `json:"showFx"` // show the selected track's top FX on line 3
-	ShowElapsed        bool `json:"showElapsed"`
+	// Line templates — change these to change what each line shows.
+	// Placeholders: {title} {version} {emoji} {transport} {fx} {fxOrTransport}
+	// {bpm}. A placeholder with no value becomes empty, and empty segments
+	// between " · " separators are dropped automatically.
+	DetailsFormat string `json:"detailsFormat"` // line 2; default "{title}"
+	StateFormat   string `json:"stateFormat"`   // line 3; default "{emoji} {fxOrTransport} · {bpm}"
+
+	ShowElapsed bool `json:"showElapsed"`
 
 	// SmallImageByTransport overlays a small badge keyed by transport state on
 	// the large image. Requires art assets keyed "play"/"pause"/"record"/"stop"
@@ -98,9 +102,9 @@ func defaultConfig() Config {
 		StaleAfterMs:    10000,
 		HideAfterIdleMs: 300000, // 5 min of inactivity hides the presence; 0 disables
 
-		ShowTransportState:    true,
-		ShowBpm:               true,
-		ShowFx:                true,
+		DetailsFormat: "{title}",
+		StateFormat:   "{emoji} {fxOrTransport} · {bpm}",
+
 		ShowElapsed:           true,
 		SmallImageByTransport: true,
 
@@ -386,6 +390,27 @@ func cleanFxName(raw string) string {
 	return strings.TrimSpace(name)
 }
 
+// renderTemplate substitutes {placeholders} and then tidies the result: empty
+// segments between " · " separators are dropped, and whitespace is collapsed.
+// So "{emoji} {fxOrTransport} · {bpm}" with no BPM renders "▶️ Serum".
+func renderTemplate(tmpl string, vars map[string]string) string {
+	out := tmpl
+	for k, v := range vars {
+		out = strings.ReplaceAll(out, "{"+k+"}", v)
+	}
+	if strings.Contains(out, "·") {
+		segs := strings.Split(out, "·")
+		kept := segs[:0]
+		for _, s := range segs {
+			if strings.TrimSpace(s) != "" {
+				kept = append(kept, strings.TrimSpace(s))
+			}
+		}
+		out = strings.Join(kept, " · ")
+	}
+	return strings.TrimSpace(strings.Join(strings.Fields(out), " "))
+}
+
 // matchVst returns the registered VST whose Match substring appears in the raw
 // FX name (case-insensitive), or nil.
 func matchVst(cfg Config, rawFx string) *VstEntry {
@@ -409,45 +434,57 @@ func buildActivity(cfg Config, st Status, sessionStart int64) (*activity, string
 	if version == "" {
 		version = "?"
 	}
-	// Prefer REAPER's actual title-bar text (e.g. "REAPER v7.74 -Licensed for
-	// personal/small business use") so the version line matches the title bar
-	// exactly, including the license string. Fall back to the version the Lua
-	// script reported if the REAPER window can't be read.
-	details := readReaperTitle()
-	if details == "" {
-		details = "REAPER v" + version
+	// {title}: REAPER's actual title-bar text (version + license string), with a
+	// fallback if the window can't be read.
+	title := readReaperTitle()
+	if title == "" {
+		title = "REAPER v" + version
 	}
 
 	emoji, word, smallKey := transportInfo(st.Transport)
 	matched := matchVst(cfg, st.Fx)
 
-	// Line 3 (state): <transport emoji> <top FX / registered VST / transport> · <BPM>.
-	// Deliberately NO project file name.
-	label := ""
-	if cfg.ShowFx {
-		if matched != nil && matched.Label != "" {
-			label = matched.Label
-		} else {
-			label = cleanFxName(st.Fx)
-		}
-	}
-	if label == "" {
-		label = word // no FX (or showFx off) -> fall back to the transport word
-	}
-	var state string
-	if cfg.ShowTransportState {
-		state = emoji + " " + label
+	// {fx}: the registered VST label, else the cleaned top-FX name ("" if none).
+	fxLabel := ""
+	if matched != nil && matched.Label != "" {
+		fxLabel = matched.Label
 	} else {
-		state = label
+		fxLabel = cleanFxName(st.Fx)
 	}
-	if cfg.ShowBpm && st.Bpm > 0 {
-		state += " · " + formatBpm(st.Bpm) + " BPM"
+	fxOrTransport := fxLabel
+	if fxOrTransport == "" {
+		fxOrTransport = word
 	}
+	bpm := ""
+	if st.Bpm > 0 {
+		bpm = formatBpm(st.Bpm) + " BPM"
+	}
+
+	// The two text lines are produced from user-editable templates. Deliberately
+	// no project file name is exposed to any placeholder.
+	vars := map[string]string{
+		"title": title, "version": version,
+		"emoji": emoji, "transport": word,
+		"fx": fxLabel, "fxOrTransport": fxOrTransport, "bpm": bpm,
+	}
+	detailsFmt := cfg.DetailsFormat
+	if detailsFmt == "" {
+		detailsFmt = "{title}"
+	}
+	stateFmt := cfg.StateFormat
+	if stateFmt == "" {
+		stateFmt = "{emoji} {fxOrTransport} · {bpm}"
+	}
+	details := renderTemplate(detailsFmt, vars)
+	if details == "" {
+		details = title
+	}
+	state := renderTemplate(stateFmt, vars)
 
 	// Large image hover text: the title-bar string, falling back to the config.
 	largeText := cfg.LargeImageText
 	if largeText == "" {
-		largeText = details
+		largeText = title
 	}
 
 	// Small badge: a matched VST's icon wins; otherwise the transport badge.
