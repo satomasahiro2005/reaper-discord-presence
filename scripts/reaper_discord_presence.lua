@@ -66,6 +66,24 @@ local function top_fx_name()
   return name or ""
 end
 
+-- Audio block size (samples) has no ReaScript API, so read it from reaper.ini
+-- (ASIO). Sample rate is read live from the API in the loop; ini is a fallback.
+local function read_audio_ini()
+  local srate, bsize = 0, 0
+  local f = io.open(reaper.GetResourcePath() .. "/reaper.ini", "r")
+  if f then
+    for line in f:lines() do
+      local s = line:match("^asio_srate=(%d+)")
+      if s then srate = tonumber(s) end
+      local b = line:match("^asio_bsize=(%d+)")
+      if b then bsize = tonumber(b) end
+    end
+    f:close()
+  end
+  return srate, bsize
+end
+local ini_srate, audio_bufsize = read_audio_ini()
+
 -- ---------------------------------------------------------------------------
 -- main deferred loop
 -- ---------------------------------------------------------------------------
@@ -89,6 +107,8 @@ local function loop()
     local transport = transport_name(state)
     local bpm       = reaper.Master_GetTempo()         -- project tempo, e.g. 120.0
     local fx        = top_fx_name()
+    local srate     = reaper.GetSetProjectInfo(0, "PROJECT_SRATE", 0, false)
+    if not srate or srate <= 0 then srate = ini_srate end
 
     local fingerprint = string.format("%d|%.3f|%.3f|%d|%s",
       state,
@@ -103,11 +123,13 @@ local function loop()
     local idle = now - last_activity
 
     local json = string.format(
-      '{"app":"REAPER","version":"%s","transport":"%s","bpm":%.3f,"fx":"%s","idleSeconds":%.1f,"timestamp":%.3f}',
+      '{"app":"REAPER","version":"%s","transport":"%s","bpm":%.3f,"fx":"%s","srate":%.0f,"bufsize":%d,"idleSeconds":%.1f,"timestamp":%.3f}',
       json_escape(version),
       json_escape(transport),
       bpm,
       json_escape(fx),
+      srate,
+      audio_bufsize,
       idle,
       now
     )

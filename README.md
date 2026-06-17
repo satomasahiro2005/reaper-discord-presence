@@ -125,6 +125,8 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 | `{fx}` | 選択トラックの先頭 FX 名（登録 VST なら登録名。無ければ空） |
 | `{fxOrTransport}` | `{fx}` があればそれ、無ければ `{transport}` |
 | `{bpm}` | テンポ（例 `128 BPM`。テンポ無しなら空） |
+| `{srate}` | サンプルレート（例 `48kHz`。`reaper.GetSetProjectInfo` 由来） |
+| `{bufsize}` | オーディオブロックサイズ（例 `128 spls`）。ReaScript APIが無いため `reaper.ini` のASIO設定から読む＝**環境設定を保存した時点で更新**（実行中の変更は即時反映されない） |
 
 値が空のプレースホルダは消えます。区切りに **`·`（中黒）** を使うと、空セグメントの前後の `·` も自動で消えてきれいに詰まります（例: テンポ無しの `{emoji} {fxOrTransport} · {bpm}` → `▶️ Serum`）。`·` 以外の区切りは自動では消えません。
 

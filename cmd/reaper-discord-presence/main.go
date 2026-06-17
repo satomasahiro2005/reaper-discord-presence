@@ -150,6 +150,8 @@ type Status struct {
 	Transport   string  `json:"transport"`
 	Bpm         float64 `json:"bpm"`
 	Fx          string  `json:"fx"`          // raw name of the top FX on the selected track
+	Srate       float64 `json:"srate"`       // audio sample rate in Hz (e.g. 48000)
+	Bufsize     int     `json:"bufsize"`     // audio block size in samples (e.g. 128)
 	IdleSeconds float64 `json:"idleSeconds"` // seconds since the last REAPER activity
 	Timestamp   float64 `json:"timestamp"`
 }
@@ -375,6 +377,14 @@ func formatBpm(b float64) string {
 	return strconv.FormatFloat(b, 'f', -1, 64)
 }
 
+// formatSrate renders a sample rate in kHz ("48kHz", "44.1kHz"), "" if unknown.
+func formatSrate(hz float64) string {
+	if hz <= 0 {
+		return ""
+	}
+	return strconv.FormatFloat(hz/1000, 'f', -1, 64) + "kHz"
+}
+
 // cleanFxName turns REAPER's raw FX name into a friendly plugin name:
 // "VSTi: Serum (Xfer Records)" -> "Serum", "JS: ReaEQ" -> "ReaEQ".
 func cleanFxName(raw string) string {
@@ -462,10 +472,15 @@ func buildActivity(cfg Config, st Status, sessionStart int64) (*activity, string
 
 	// The two text lines are produced from user-editable templates. Deliberately
 	// no project file name is exposed to any placeholder.
+	bufsize := ""
+	if st.Bufsize > 0 {
+		bufsize = strconv.Itoa(st.Bufsize) + " spls"
+	}
 	vars := map[string]string{
 		"title": title, "version": version,
 		"emoji": emoji, "transport": word,
 		"fx": fxLabel, "fxOrTransport": fxOrTransport, "bpm": bpm,
+		"srate": formatSrate(st.Srate), "bufsize": bufsize,
 	}
 	detailsFmt := cfg.DetailsFormat
 	if detailsFmt == "" {
