@@ -62,8 +62,13 @@ type Config struct {
 	PollIntervalMs int    `json:"pollIntervalMs"`
 	StaleAfterMs   int    `json:"staleAfterMs"`
 
-	// HideAfterIdleMs clears the presence after this much REAPER inactivity
-	// (no playback, cursor move, or edit). 0 disables idle-hiding.
+	// AwayAfterMs switches the presence to an "away" status after this much
+	// REAPER inactivity (no playback, cursor move, or edit). 0 disables it.
+	// Coming back from away resets the elapsed (play) timer to 0.
+	AwayAfterMs int    `json:"awayAfterMs"`
+	AwayText    string `json:"awayText"` // line 3 while away (e.g. "Away")
+
+	// Deprecated alias for AwayAfterMs (kept so older configs still work).
 	HideAfterIdleMs int `json:"hideAfterIdleMs"`
 
 	// Line templates — change these to change what each line shows.
@@ -100,7 +105,8 @@ func defaultConfig() Config {
 		LargeImageText:  "", // empty -> auto (REAPER title-bar text)
 		PollIntervalMs:  2000,
 		StaleAfterMs:    10000,
-		HideAfterIdleMs: 300000, // 5 min of inactivity hides the presence; 0 disables
+		AwayAfterMs:     600000, // 10 min of inactivity -> "away"; 0 disables
+		AwayText:        "Away",
 
 		DetailsFormat: "REAPER v{version}", // robust: from reaper.GetAppVersion(). Use "{title}" to mirror the title bar (adds the license line, but reads the window title).
 		StateFormat:   "{emoji} {fxOrTransport} · {bpm}",
@@ -133,6 +139,12 @@ func loadConfig(path string) Config {
 	}
 	if cfg.StaleAfterMs <= 0 {
 		cfg.StaleAfterMs = 10000
+	}
+	if cfg.AwayAfterMs == 0 && cfg.HideAfterIdleMs > 0 {
+		cfg.AwayAfterMs = cfg.HideAfterIdleMs // migrate the old hideAfterIdleMs key
+	}
+	if cfg.AwayText == "" {
+		cfg.AwayText = "Away"
 	}
 	if cfg.LargeImageKey == "" {
 		cfg.LargeImageKey = "reaper"
@@ -549,6 +561,57 @@ func buildActivity(cfg Config, st Status, sessionStart int64) (*activity, string
 	return act, key
 }
 
+// buildAwayActivity is shown after AwayAfterMs of inactivity: the configured
+// away text on line 3 (no FX/BPM), with the timer counting the away duration.
+// The normal play timer is reset to 0 when the user comes back.
+func buildAwayActivity(cfg Config, st Status, awayStart int64) (*activity, string) {
+	version := st.Version
+	if version == "" {
+		version = "?"
+	}
+	title := readReaperTitle()
+	if title == "" {
+		title = "REAPER v" + version
+	}
+	vars := map[string]string{
+		"title": title, "version": version,
+		"emoji": "", "transport": "", "fx": "", "fxOrTransport": "", "bpm": "", "srate": "", "bufsize": "",
+	}
+	detailsFmt := cfg.DetailsFormat
+	if detailsFmt == "" {
+		detailsFmt = "REAPER v{version}"
+	}
+	details := renderTemplate(detailsFmt, vars)
+	if details == "" {
+		details = title
+	}
+	state := cfg.AwayText
+	if state == "" {
+		state = "Away"
+	}
+	largeText := cfg.LargeImageText
+	if largeText == "" {
+		largeText = title
+	}
+	act := &activity{
+		Type:    0,
+		Details: details,
+		State:   state,
+		Assets:  &assets{LargeImage: cfg.LargeImageKey, LargeText: largeText},
+	}
+	if cfg.ShowElapsed && awayStart > 0 {
+		act.Timestamps = &timestamps{Start: awayStart}
+	}
+	if cfg.Button1Label != "" && cfg.Button1Url != "" {
+		act.Buttons = append(act.Buttons, button{Label: cfg.Button1Label, Url: cfg.Button1Url})
+	}
+	if cfg.Button2Label != "" && cfg.Button2Url != "" {
+		act.Buttons = append(act.Buttons, button{Label: cfg.Button2Label, Url: cfg.Button2Url})
+	}
+	key := "AWAY\x00" + details + "\x00" + state + "\x00" + cfg.LargeImageKey
+	return act, key
+}
+
 // ---------------------------------------------------------------------------
 // single instance (Windows named mutex; auto-released by the OS on exit, so
 // there is no stale lock file to clean up after a crash)
@@ -603,7 +666,9 @@ func main() {
 		lastSentKey  string
 		lastSendTime time.Time // for the SET_ACTIVITY rate-limit debounce
 		cleared      = true     // nothing currently shown
-		sessionStart int64      // unix MILLIS REAPER (re)appeared; 0 when not running
+		sessionStart int64      // unix MILLIS the current play timer started; 0 when not running
+		away         bool       // currently showing the "away" status
+		awayStart    int64      // unix MILLIS the away period started
 		curClientID  string
 		downLogged   bool   // throttle "Discord unreachable" logging
 		badIDLogged  bool   // throttle "set clientId" logging
@@ -657,6 +722,7 @@ func main() {
 				lastSendTime = time.Now()
 			}
 			cleared = true
+			away = false
 			sessionStart = 0
 			lastSentKey = ""
 			time.Sleep(pollInterval)
@@ -676,29 +742,31 @@ func main() {
 			continue
 		}
 
-		// Idle auto-hide: REAPER is open but nothing has happened (no playback,
-		// cursor move, or edit) for a while -> clear the presence. We keep
-		// watching, so it reappears as soon as the user does something.
-		if cfg.HideAfterIdleMs > 0 && st.IdleSeconds*1000 >= float64(cfg.HideAfterIdleMs) {
-			if conn != nil && !cleared {
-				if err := setActivity(conn, nil); err != nil {
-					log.Printf("clear failed: %v", err)
-					closeConn()
-				} else {
-					log.Printf("idle %.0fs; hid presence", st.IdleSeconds)
-				}
-				lastSendTime = time.Now()
+		// Away mode: after AwayAfterMs of inactivity (no playback, cursor move,
+		// or edit), show the "away" status instead of the normal one. Returning
+		// from away resets the play timer to 0.
+		isAway := cfg.AwayAfterMs > 0 && st.IdleSeconds*1000 >= float64(cfg.AwayAfterMs)
+		var act *activity
+		var key string
+		if isAway {
+			if !away {
+				away = true
+				awayStart = time.Now().UnixMilli()
+				log.Printf("away (idle %.0fs)", st.IdleSeconds)
 			}
-			cleared = true
-			lastSentKey = ""
-			time.Sleep(pollInterval)
-			continue
+			act, key = buildAwayActivity(cfg, st, awayStart)
+		} else {
+			if away || sessionStart == 0 {
+				// Start the play timer on first appearance, and restart it (from
+				// 0) whenever the user comes back from away.
+				if away {
+					log.Printf("back from away; play timer reset")
+				}
+				away = false
+				sessionStart = time.Now().UnixMilli()
+			}
+			act, key = buildActivity(cfg, st, sessionStart)
 		}
-
-		if sessionStart == 0 {
-			sessionStart = time.Now().UnixMilli()
-		}
-		act, key := buildActivity(cfg, st, sessionStart)
 
 		// Ensure a connection to Discord.
 		if conn == nil {
