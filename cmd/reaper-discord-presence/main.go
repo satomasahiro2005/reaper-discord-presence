@@ -415,6 +415,24 @@ func shortVersion(v string) string {
 	return v
 }
 
+// readDeviceSrate reads the active audio device sample rate from reaper.ini
+// (ASIO). REAPER's status display uses the DEVICE rate, which can differ from
+// the project rate. Returns 0 if not found.
+func readDeviceSrate(resDir string) float64 {
+	data, err := os.ReadFile(filepath.Join(resDir, "reaper.ini"))
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if s, ok := strings.CutPrefix(strings.TrimSpace(line), "asio_srate="); ok {
+			if v, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
+				return v
+			}
+		}
+	}
+	return 0
+}
+
 // cleanFxName turns REAPER's raw FX name into a friendly plugin name:
 // "VSTi: Serum (Xfer Records)" -> "Serum", "JS: ReaEQ" -> "ReaEQ".
 func cleanFxName(raw string) string {
@@ -469,7 +487,7 @@ func matchVst(cfg Config, rawFx string) *VstEntry {
 // buildActivity turns a status + config into a Discord activity, plus a dedupe
 // key (the meaningful, timestamp-independent content) used to avoid resending
 // an unchanged presence.
-func buildActivity(cfg Config, st Status, sessionStart int64) (*activity, string) {
+func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float64) (*activity, string) {
 	version := st.Version
 	if version == "" {
 		version = "?"
@@ -506,12 +524,23 @@ func buildActivity(cfg Config, st Status, sessionStart int64) (*activity, string
 	if st.Bufsize > 0 {
 		bufsize = strconv.Itoa(st.Bufsize) + " spls"
 	}
+	// Prefer the DEVICE sample rate (reaper.ini) over the rate the Lua reported
+	// (which may be the project rate). Rescale the Lua's latency — it divided by
+	// st.Srate — to the device rate so it stays correct regardless of Lua version.
+	srate := deviceSrate
+	if srate <= 0 {
+		srate = st.Srate
+	}
+	scale := 1.0
+	if st.Srate > 0 && srate > 0 {
+		scale = st.Srate / srate
+	}
 	vars := map[string]string{
 		"title": title, "version": version,
 		"emoji": emoji, "transport": word,
 		"fx": fxLabel, "fxOrTransport": fxOrTransport, "bpm": bpm,
-		"srate": formatSrate(st.Srate), "bufsize": bufsize,
-		"latency": formatLatency(st.LatIn, st.LatOut),
+		"srate": formatSrate(srate), "bufsize": bufsize,
+		"latency": formatLatency(st.LatIn*scale, st.LatOut*scale),
 		"ver":     shortVersion(version), // version without the /x64 arch suffix
 	}
 	detailsFmt := cfg.DetailsFormat
@@ -762,6 +791,8 @@ func main() {
 			continue
 		}
 
+		deviceSrate := readDeviceSrate(resDir)
+
 		// Away mode: after AwayAfterMs of inactivity (no playback, cursor move,
 		// or edit), show the "away" status instead of the normal one. Returning
 		// from away resets the play timer to 0.
@@ -785,7 +816,7 @@ func main() {
 				away = false
 				sessionStart = time.Now().UnixMilli()
 			}
-			act, key = buildActivity(cfg, st, sessionStart)
+			act, key = buildActivity(cfg, st, sessionStart, deviceSrate)
 		}
 
 		// Ensure a connection to Discord.
