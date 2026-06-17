@@ -176,6 +176,10 @@ type Status struct {
 	Fx          string  `json:"fx"`          // raw name of the top FX on the selected track
 	Srate       float64 `json:"srate"`       // audio sample rate in Hz (e.g. 48000)
 	Bufsize     int     `json:"bufsize"`     // audio block size in samples (e.g. 128)
+	Bps         int     `json:"bps"`         // bits per sample (e.g. 24)
+	NIn         int     `json:"nIn"`         // number of audio input channels
+	NOut        int     `json:"nOut"`        // number of audio output channels
+	Driver      string  `json:"driver"`      // audio driver mode (e.g. "ASIO")
 	LatIn       float64 `json:"latIn"`       // input latency in ms
 	LatOut      float64 `json:"latOut"`      // output latency in ms
 	IdleSeconds float64 `json:"idleSeconds"` // seconds since the last REAPER activity
@@ -551,6 +555,14 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 	if st.Bufsize > 0 {
 		bufsize = strconv.Itoa(st.Bufsize) + " spls"
 	}
+	bps := ""
+	if st.Bps > 0 {
+		bps = strconv.Itoa(st.Bps) + "bit"
+	}
+	channels := ""
+	if st.NIn > 0 || st.NOut > 0 {
+		channels = strconv.Itoa(st.NIn) + "/" + strconv.Itoa(st.NOut) + "ch"
+	}
 	// Prefer the DEVICE sample rate (reaper.ini) over the rate the Lua reported
 	// (which may be the project rate). Rescale the Lua's latency — it divided by
 	// st.Srate — to the device rate so it stays correct regardless of Lua version.
@@ -567,6 +579,7 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 		"emoji": emoji, "transport": word,
 		"fx": fxLabel, "fxOrTransport": fxOrTransport, "bpm": bpm,
 		"srate": formatSrate(srate), "bufsize": bufsize,
+		"bps": bps, "channels": channels, "driver": st.Driver,
 		"latency": formatLatency(st.LatIn*scale, st.LatOut*scale),
 		"ver":     shortVersion(version), // version without the /x64 arch suffix
 	}
@@ -584,27 +597,28 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 	}
 	state := renderTemplate(stateFmt, vars)
 
-	// Large image hover text: the title-bar string, falling back to the config.
-	largeText := cfg.LargeImageText
+	// Large-image caption (large_text). Supports templates, e.g. "REAPER v{ver}".
+	largeText := renderTemplate(cfg.LargeImageText, vars)
 	if largeText == "" {
 		largeText = title
 	}
 
-	// Primary art = the large image (REAPER); secondary = a matched VST's icon,
-	// else the transport badge. SwapImages exchanges which is large vs small.
-	primaryImg, primaryText := cfg.LargeImageKey, largeText
-	secondaryImg, secondaryText := "", ""
+	// Choose which art is large vs small. SwapImages puts the VST/transport icon
+	// big and REAPER as the small badge. The large-image caption is always
+	// largeText; the small-image hover shows the other label.
+	primaryImg := cfg.LargeImageKey       // REAPER
+	secondaryImg, secondaryText := "", "" // VST icon or transport badge
 	if matched != nil && matched.ImageKey != "" {
 		secondaryImg, secondaryText = matched.ImageKey, matched.Label
 	} else if cfg.SmallImageByTransport {
-		secondaryImg, secondaryText = smallKey, word // shows only if uploaded
+		secondaryImg, secondaryText = smallKey, word
 	}
-	ass := &assets{}
+	ass := &assets{LargeText: largeText}
 	if cfg.SwapImages && secondaryImg != "" {
-		ass.LargeImage, ass.LargeText = secondaryImg, secondaryText
-		ass.SmallImage, ass.SmallText = primaryImg, primaryText
+		ass.LargeImage = secondaryImg // VST icon big
+		ass.SmallImage, ass.SmallText = primaryImg, secondaryText
 	} else {
-		ass.LargeImage, ass.LargeText = primaryImg, primaryText
+		ass.LargeImage = primaryImg // REAPER big
 		ass.SmallImage, ass.SmallText = secondaryImg, secondaryText
 	}
 
@@ -660,6 +674,7 @@ func buildAwayActivity(cfg Config, st Status, awayStart int64) (*activity, strin
 	vars := map[string]string{
 		"title": title, "version": version, "ver": shortVersion(version),
 		"emoji": "", "transport": "", "fx": "", "fxOrTransport": "", "bpm": "", "srate": "", "bufsize": "", "latency": "",
+		"bps": "", "channels": "", "driver": "",
 	}
 	detailsFmt := cfg.DetailsFormat
 	if detailsFmt == "" {
@@ -673,7 +688,7 @@ func buildAwayActivity(cfg Config, st Status, awayStart int64) (*activity, strin
 	if state == "" {
 		state = "Away"
 	}
-	largeText := cfg.LargeImageText
+	largeText := renderTemplate(cfg.LargeImageText, vars)
 	if largeText == "" {
 		largeText = title
 	}

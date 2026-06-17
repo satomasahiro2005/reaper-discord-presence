@@ -97,7 +97,7 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 |------|--------|------|
 | `clientId` | — | Discord Application ID（**必須**） |
 | `largeImageKey` | `reaper` | 大画像の Art Asset キー |
-| `largeImageText` | `""` | 画像ホバー時の文字。空ならタイトルバー文字列を自動使用 |
+| `largeImageText` | `""` | 大画像のキャプション（テンプレート可、例 `REAPER v{ver}`）。空ならタイトルバー文字列。`listening` レイアウトでは行として見える |
 | `activityType` | `playing` | 1 行目の動詞: `playing` / `listening`（→ Listening to）/ `watching` / `competing`。RPC はこの4つのみ |
 | `pollIntervalMs` | `2000` | 状態 JSON を確認する間隔（ミリ秒） |
 | `staleAfterMs` | `60000` | JSON がこの時間更新されないと REAPER 終了とみなす（ミリ秒）。VST 読込等で一時的に応答なしになっても消えないよう既定 60 秒。正常終了は即クリア（Lua の atexit が状態ファイルを消すため） |
@@ -133,6 +133,9 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 | `{srate}` | サンプルレート（例 `48kHz`。`reaper.GetSetProjectInfo` 由来） |
 | `{bufsize}` | オーディオブロックサイズ（例 `128 spls`）。ReaScript APIが無いため `reaper.ini` のASIO設定から読む＝**環境設定を保存した時点で更新**（実行中の変更は即時反映されない） |
 | `{latency}` | 入出力レイテンシ（例 `2.2/3.0ms`。`reaper.GetInputOutputLatency` 由来） |
+| `{bps}` | ビット深度（例 `24bit`。`GetAudioDeviceInfo` BPS 由来） |
+| `{channels}` | 入出力チャンネル数（例 `2/2ch`） |
+| `{driver}` | オーディオドライバ（例 `ASIO`。`GetAudioDeviceInfo` MODE 由来） |
 
 値が空のプレースホルダは消えます。区切りに **`·`（中黒）** を使うと、空セグメントの前後の `·` も自動で消えてきれいに詰まります（例: テンポ無しの `{emoji} {fxOrTransport} · {bpm}` → `▶️ Serum`）。`·` 以外の区切りは自動では消えません。
 

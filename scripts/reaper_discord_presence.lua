@@ -107,13 +107,22 @@ local function loop()
     local transport = transport_name(state)
     local bpm       = reaper.Master_GetTempo()         -- project tempo, e.g. 120.0
     local fx        = top_fx_name()
-    -- Device sample rate (matches REAPER's top-right). The PROJECT sample rate
-    -- can differ (REAPER resamples), and GetInputOutputLatency returns DEVICE
-    -- samples, so we must use the device rate (reaper.ini asio_srate) here.
-    local srate = ini_srate
+    -- Device audio info via the proper API (matches REAPER's top-right status).
+    local function devinfo(attr)
+      if not reaper.GetAudioDeviceInfo then return "" end
+      local ok, v = reaper.GetAudioDeviceInfo(attr, "")
+      if ok then return v else return "" end
+    end
+    local srate = tonumber(devinfo("SRATE")) or 0
+    if srate <= 0 then srate = ini_srate end
     if srate <= 0 then srate = reaper.GetSetProjectInfo(0, "PROJECT_SRATE", 0, false) end
-    local inlat, outlat = reaper.GetInputOutputLatency()      -- latency in samples
-    local lat_in  = (srate > 0) and (inlat  / srate * 1000) or 0  -- ms (device rate)
+    local bsize  = tonumber(devinfo("BSIZE")) or audio_bufsize  -- block size (samples)
+    local bps    = tonumber(devinfo("BPS")) or 0                -- bits per sample
+    local driver = devinfo("MODE")                              -- e.g. "ASIO"
+    local n_in   = reaper.GetNumAudioInputs  and reaper.GetNumAudioInputs()  or 0
+    local n_out  = reaper.GetNumAudioOutputs and reaper.GetNumAudioOutputs() or 0
+    local inlat, outlat = reaper.GetInputOutputLatency()        -- latency in DEVICE samples
+    local lat_in  = (srate > 0) and (inlat  / srate * 1000) or 0  -- ms
     local lat_out = (srate > 0) and (outlat / srate * 1000) or 0  -- ms
 
     -- MIDI input counts as activity too, so playing a controller un-idles.
@@ -136,13 +145,17 @@ local function loop()
     local idle = now - last_activity
 
     local json = string.format(
-      '{"app":"REAPER","version":"%s","transport":"%s","bpm":%.3f,"fx":"%s","srate":%.0f,"bufsize":%d,"latIn":%.1f,"latOut":%.1f,"idleSeconds":%.1f,"timestamp":%.3f}',
+      '{"app":"REAPER","version":"%s","transport":"%s","bpm":%.3f,"fx":"%s","srate":%.0f,"bufsize":%d,"bps":%d,"nIn":%d,"nOut":%d,"driver":"%s","latIn":%.1f,"latOut":%.1f,"idleSeconds":%.1f,"timestamp":%.3f}',
       json_escape(version),
       json_escape(transport),
       bpm,
       json_escape(fx),
       srate,
-      audio_bufsize,
+      bsize,
+      bps,
+      n_in,
+      n_out,
+      json_escape(driver),
       lat_in,
       lat_out,
       idle,
