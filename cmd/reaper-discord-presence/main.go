@@ -65,8 +65,9 @@ type Config struct {
 	// AwayAfterMs switches the presence to an "away" status after this much
 	// REAPER inactivity (no playback, cursor move, or edit). 0 disables it.
 	// Coming back from away resets the elapsed (play) timer to 0.
-	AwayAfterMs int    `json:"awayAfterMs"`
-	AwayText    string `json:"awayText"` // line 3 while away (e.g. "Away")
+	AwayAfterMs  int    `json:"awayAfterMs"`
+	AwayText     string `json:"awayText"`     // line 3 while away (e.g. "Away")
+	AwayImageKey string `json:"awayImageKey"` // large image while away; empty -> largeImageKey
 
 	// Deprecated alias for AwayAfterMs (kept so older configs still work).
 	HideAfterIdleMs int `json:"hideAfterIdleMs"`
@@ -85,6 +86,11 @@ type Config struct {
 	// in the Developer Portal; if they're missing the badge is silently skipped.
 	// A matched VST's ImageKey takes priority over the transport badge.
 	SmallImageByTransport bool `json:"smallImageByTransport"`
+
+	// SwapImages swaps the large and small art: the VST/transport icon becomes
+	// the big image and the large image (REAPER) becomes the small badge. Only
+	// applies when there is a secondary (VST/transport) image to swap with.
+	SwapImages bool `json:"swapImages"`
 
 	// Registered plugins (see VstEntry).
 	Vsts []VstEntry `json:"vsts"`
@@ -563,14 +569,22 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 		largeText = title
 	}
 
-	// Small badge: a matched VST's icon wins; otherwise the transport badge.
-	ass := &assets{LargeImage: cfg.LargeImageKey, LargeText: largeText}
+	// Primary art = the large image (REAPER); secondary = a matched VST's icon,
+	// else the transport badge. SwapImages exchanges which is large vs small.
+	primaryImg, primaryText := cfg.LargeImageKey, largeText
+	secondaryImg, secondaryText := "", ""
 	if matched != nil && matched.ImageKey != "" {
-		ass.SmallImage = matched.ImageKey
-		ass.SmallText = matched.Label
+		secondaryImg, secondaryText = matched.ImageKey, matched.Label
 	} else if cfg.SmallImageByTransport {
-		ass.SmallImage = smallKey // shows only if such an asset is uploaded
-		ass.SmallText = word
+		secondaryImg, secondaryText = smallKey, word // shows only if uploaded
+	}
+	ass := &assets{}
+	if cfg.SwapImages && secondaryImg != "" {
+		ass.LargeImage, ass.LargeText = secondaryImg, secondaryText
+		ass.SmallImage, ass.SmallText = primaryImg, primaryText
+	} else {
+		ass.LargeImage, ass.LargeText = primaryImg, primaryText
+		ass.SmallImage, ass.SmallText = secondaryImg, secondaryText
 	}
 
 	act := &activity{
@@ -642,11 +656,15 @@ func buildAwayActivity(cfg Config, st Status, awayStart int64) (*activity, strin
 	if largeText == "" {
 		largeText = title
 	}
+	awayImg := cfg.AwayImageKey
+	if awayImg == "" {
+		awayImg = cfg.LargeImageKey
+	}
 	act := &activity{
 		Type:    0,
 		Details: details,
 		State:   state,
-		Assets:  &assets{LargeImage: cfg.LargeImageKey, LargeText: largeText},
+		Assets:  &assets{LargeImage: awayImg, LargeText: largeText},
 	}
 	if cfg.ShowElapsed && awayStart > 0 {
 		act.Timestamps = &timestamps{Start: awayStart}

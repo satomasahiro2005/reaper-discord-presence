@@ -6,10 +6,12 @@
   "staleAfterMs": 60000,
   "awayAfterMs": 600000,
   "awayText": "Idle",
+  "awayImageKey": "",
   "detailsFormat": "v{ver} · {srate} · {bufsize} · {latency}",
   "stateFormat": "{fx} · {bpm}",
   "showElapsed": true,
   "smallImageByTransport": true,
+  "swapImages": false,
   "vsts": [
     { "match": "Serum 2", "label": "Serum 2", "imageKey": "serum2", "downloadUrl": "https://xferrecords.com/products/serum-2" },
     { "match": "Vital", "label": "Vital", "imageKey": "vital", "downloadUrl": "https://vital.audio/" }

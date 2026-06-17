@@ -102,10 +102,12 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 | `staleAfterMs` | `60000` | JSON がこの時間更新されないと REAPER 終了とみなす（ミリ秒）。VST 読込等で一時的に応答なしになっても消えないよう既定 60 秒。正常終了は即クリア（Lua の atexit が状態ファイルを消すため） |
 | `awayAfterMs` | `600000` | この時間 REAPER を操作しないと「離席中」表示に切替（10 分）。`0` で無効。戻ると経過時間が 0 にリセット |
 | `awayText` | `Idle` | 離席中に 3 行目へ出す文言（例 `Idle` / `離席中`） |
+| `awayImageKey` | `""` | 離席中の大画像 Art Asset キー。空なら `largeImageKey` と同じ |
 | `detailsFormat` | `v{ver} · {srate} · {bufsize} · {latency}` | 2 行目のテンプレート（下記） |
 | `stateFormat` | `{emoji} {fxOrTransport} · {bpm}` | 3 行目のテンプレート（下記） |
 | `showElapsed` | `true` | 経過時間（for HH:MM）を表示する |
 | `smallImageByTransport` | `true` | 再生状態の小バッジを表示する（要 `play`/`pause`/`record`/`stop` アセット） |
+| `swapImages` | `false` | 大画像と小バッジを入れ替える（VST/状態アイコンを大きく、REAPER を小バッジに） |
 | `vsts` | `[]` | プラグイン登録表（下記参照） |
 | `button1Label` / `button1Url` | `Get REAPER` / reaper.fm | ボタン 1。空にすると非表示 |
 | `button2Label` / `button2Url` | `""` | ボタン 2。空にすると非表示 |
