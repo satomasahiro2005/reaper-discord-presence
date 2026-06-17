@@ -19,6 +19,12 @@ local res_path    = reaper.GetResourcePath()
 local status_path = res_path .. "/reaper_discord_presence.json"
 local exe_path    = res_path .. "/Scripts/reaper-discord-presence.exe"
 
+-- Single-instance guard: each run bumps a shared generation token; any older
+-- instance of this script sees it changed and stops on its next tick, so
+-- re-running never leaves two loops racing on the status file.
+local MY_GEN = tostring((tonumber(reaper.GetExtState("reaper_discord_presence", "gen")) or 0) + 1)
+reaper.SetExtState("reaper_discord_presence", "gen", MY_GEN, false)
+
 -- ---------------------------------------------------------------------------
 -- helpers
 -- ---------------------------------------------------------------------------
@@ -98,6 +104,8 @@ local last_fingerprint = nil
 local last_activity = reaper.time_precise()
 
 local function loop()
+  -- Stop if a newer instance has started (single-instance guard).
+  if reaper.GetExtState("reaper_discord_presence", "gen") ~= MY_GEN then return end
   local now = reaper.time_precise()
   if now >= next_run then
     next_run = now + POLL_SECONDS
