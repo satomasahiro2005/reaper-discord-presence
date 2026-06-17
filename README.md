@@ -99,10 +99,10 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 | `largeImageKey` | `reaper` | 大画像の Art Asset キー |
 | `largeImageText` | `""` | 画像ホバー時の文字。空ならタイトルバー文字列を自動使用 |
 | `pollIntervalMs` | `2000` | 状態 JSON を確認する間隔（ミリ秒） |
-| `staleAfterMs` | `10000` | JSON がこの時間更新されないと REAPER 終了とみなす（ミリ秒） |
+| `staleAfterMs` | `60000` | JSON がこの時間更新されないと REAPER 終了とみなす（ミリ秒）。VST 読込等で一時的に応答なしになっても消えないよう既定 60 秒。正常終了は即クリア（Lua の atexit が状態ファイルを消すため） |
 | `awayAfterMs` | `600000` | この時間 REAPER を操作しないと「離席中」表示に切替（10 分）。`0` で無効。戻ると経過時間が 0 にリセット |
 | `awayText` | `Idle` | 離席中に 3 行目へ出す文言（例 `Idle` / `離席中`） |
-| `detailsFormat` | `v{version} · {srate} · {bufsize} · {latency}` | 2 行目のテンプレート（下記） |
+| `detailsFormat` | `v{ver} · {srate} · {bufsize} · {latency}` | 2 行目のテンプレート（下記） |
 | `stateFormat` | `{emoji} {fxOrTransport} · {bpm}` | 3 行目のテンプレート（下記） |
 | `showElapsed` | `true` | 経過時間（for HH:MM）を表示する |
 | `smallImageByTransport` | `true` | 再生状態の小バッジを表示する（要 `play`/`pause`/`record`/`stop` アセット） |
@@ -120,7 +120,8 @@ Discord デスクトップ版と REAPER を起動します。数秒後、Discord
 | プレースホルダ | 中身 |
 |------|------|
 | `{title}` | REAPER のタイトルバー文字列（例 `REAPER v7.74 -Licensed ...`）。ライセンス表記を含むが**ウィンドウタイトルを読む**方式 |
-| `{version}` | バージョン（例 `7.74/x64`） |
+| `{version}` | バージョン（arch 付き、例 `7.74/x64`） |
+| `{ver}` | バージョン（arch 無し、例 `7.74`）。`/x64` を出したくない時はこちら |
 | `{emoji}` | 再生状態の絵文字（▶️ / ⏸️ / ⏺️ / ⏹️） |
 | `{transport}` | 再生状態の語（Playing / Paused / Recording / Stopped） |
 | `{fx}` | 選択トラックの先頭 FX 名（登録 VST なら登録名。無ければ空） |

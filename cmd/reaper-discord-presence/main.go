@@ -104,11 +104,11 @@ func defaultConfig() Config {
 		LargeImageKey:   "reaper",
 		LargeImageText:  "", // empty -> auto (REAPER title-bar text)
 		PollIntervalMs:  2000,
-		StaleAfterMs:    10000,
+		StaleAfterMs:    60000, // tolerate ~60s of no updates (e.g. a VST-load hang) before treating REAPER as closed
 		AwayAfterMs:     600000, // 10 min of inactivity -> "away"; 0 disables
 		AwayText:        "Idle",
 
-		DetailsFormat: "v{version} · {srate} · {bufsize} · {latency}", // version from reaper.GetAppVersion() + audio info; use "{title}" to mirror the title bar
+		DetailsFormat: "v{ver} · {srate} · {bufsize} · {latency}", // {ver}=version without /x64; use {version} to keep the arch, or {title} for the title bar
 		StateFormat:   "{emoji} {fxOrTransport} · {bpm}",
 
 		ShowElapsed:           true,
@@ -138,7 +138,7 @@ func loadConfig(path string) Config {
 		cfg.PollIntervalMs = 2000
 	}
 	if cfg.StaleAfterMs <= 0 {
-		cfg.StaleAfterMs = 10000
+		cfg.StaleAfterMs = 60000
 	}
 	if cfg.AwayAfterMs == 0 && cfg.HideAfterIdleMs > 0 {
 		cfg.AwayAfterMs = cfg.HideAfterIdleMs // migrate the old hideAfterIdleMs key
@@ -407,6 +407,14 @@ func formatLatency(inMs, outMs float64) string {
 	return strconv.FormatFloat(inMs, 'f', 1, 64) + "/" + strconv.FormatFloat(outMs, 'f', 1, 64) + "ms"
 }
 
+// shortVersion drops the "/x64" architecture suffix: "7.74/x64" -> "7.74".
+func shortVersion(v string) string {
+	if i := strings.IndexByte(v, '/'); i >= 0 {
+		return v[:i]
+	}
+	return v
+}
+
 // cleanFxName turns REAPER's raw FX name into a friendly plugin name:
 // "VSTi: Serum (Xfer Records)" -> "Serum", "JS: ReaEQ" -> "ReaEQ".
 func cleanFxName(raw string) string {
@@ -504,6 +512,7 @@ func buildActivity(cfg Config, st Status, sessionStart int64) (*activity, string
 		"fx": fxLabel, "fxOrTransport": fxOrTransport, "bpm": bpm,
 		"srate": formatSrate(st.Srate), "bufsize": bufsize,
 		"latency": formatLatency(st.LatIn, st.LatOut),
+		"ver":     shortVersion(version), // version without the /x64 arch suffix
 	}
 	detailsFmt := cfg.DetailsFormat
 	if detailsFmt == "" {
@@ -585,7 +594,7 @@ func buildAwayActivity(cfg Config, st Status, awayStart int64) (*activity, strin
 		title = "REAPER v" + version
 	}
 	vars := map[string]string{
-		"title": title, "version": version,
+		"title": title, "version": version, "ver": shortVersion(version),
 		"emoji": "", "transport": "", "fx": "", "fxOrTransport": "", "bpm": "", "srate": "", "bufsize": "", "latency": "",
 	}
 	detailsFmt := cfg.DetailsFormat

@@ -107,18 +107,28 @@ local function loop()
     local transport = transport_name(state)
     local bpm       = reaper.Master_GetTempo()         -- project tempo, e.g. 120.0
     local fx        = top_fx_name()
-    local srate     = reaper.GetSetProjectInfo(0, "PROJECT_SRATE", 0, false)
-    if not srate or srate <= 0 then srate = ini_srate end
+    -- Device sample rate (matches REAPER's top-right). The PROJECT sample rate
+    -- can differ (REAPER resamples), and GetInputOutputLatency returns DEVICE
+    -- samples, so we must use the device rate (reaper.ini asio_srate) here.
+    local srate = ini_srate
+    if srate <= 0 then srate = reaper.GetSetProjectInfo(0, "PROJECT_SRATE", 0, false) end
     local inlat, outlat = reaper.GetInputOutputLatency()      -- latency in samples
-    local lat_in  = (srate > 0) and (inlat  / srate * 1000) or 0  -- ms
+    local lat_in  = (srate > 0) and (inlat  / srate * 1000) or 0  -- ms (device rate)
     local lat_out = (srate > 0) and (outlat / srate * 1000) or 0  -- ms
 
-    local fingerprint = string.format("%d|%.3f|%.3f|%d|%s",
+    -- MIDI input counts as activity too, so playing a controller un-idles.
+    local midi_tok = "0"
+    if reaper.MIDI_GetRecentInputEvent then
+      local mret, _, mts = reaper.MIDI_GetRecentInputEvent(0)
+      midi_tok = tostring(mret) .. ":" .. tostring(mts)
+    end
+    local fingerprint = string.format("%d|%.3f|%.3f|%d|%s|%s",
       state,
       reaper.GetPlayPosition(),                -- moves continuously while playing
       reaper.GetCursorPosition(),              -- moves when the edit cursor moves
       reaper.GetProjectStateChangeCount(0),    -- increments on any edit
-      fx)
+      fx,
+      midi_tok)                                -- changes when MIDI input arrives
     if fingerprint ~= last_fingerprint then
       last_fingerprint = fingerprint
       last_activity = now
