@@ -609,6 +609,13 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 	}
 	state := renderTemplate(stateFmt, vars)
 
+	// While away/idle, the away text is the complete status line. Don't let the
+	// active detailsFormat decorate it (e.g. a literal "▶ " prefix would render
+	// "▶ Idle"); show awayText verbatim on the details line instead.
+	if awayLabel != "" {
+		details = awayLabel
+	}
+
 	// Large-image caption (large_text). Supports templates, e.g. "REAPER v{ver}".
 	largeText := renderTemplate(cfg.LargeImageText, vars)
 	if largeText == "" {
@@ -667,9 +674,10 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 	if cfg.Button1Label != "" && cfg.Button1Url != "" {
 		act.Buttons = append(act.Buttons, button{Label: cfg.Button1Label, Url: cfg.Button1Url})
 	}
-	// Button 2: a matched VST's download link overrides the configured button 2.
+	// Button 2: a matched VST's download link overrides the configured button 2 —
+	// but not while away (the FX isn't what's "playing", so don't push its button).
 	b2l, b2u := cfg.Button2Label, cfg.Button2Url
-	if matched != nil && matched.DownloadUrl != "" {
+	if matched != nil && matched.DownloadUrl != "" && awayLabel == "" {
 		lbl := matched.Label
 		if lbl == "" {
 			lbl = "plugin"
