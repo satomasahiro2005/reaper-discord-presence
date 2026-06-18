@@ -371,14 +371,14 @@ var (
 	procEnumWindows          = user32.NewProc("EnumWindows")
 	procGetWindowTextW       = user32.NewProc("GetWindowTextW")
 	procGetWindowTextLengthW = user32.NewProc("GetWindowTextLengthW")
-)
 
-// readReaperTitle returns REAPER's title-bar text from "REAPER v" onward, e.g.
-// "REAPER v7.74 -Licensed for personal/small business use", or "" if no such
-// window exists. This mirrors exactly what REAPER shows in its title bar.
-func readReaperTitle() string {
-	var found string
-	cb := syscall.NewCallback(func(hwnd uintptr, lparam uintptr) uintptr {
+	// The EnumWindows callback MUST be created exactly once and reused.
+	// syscall.NewCallback draws from a small fixed per-process pool (~2000) that
+	// is never freed; creating one per poll leaks until the process panics with
+	// "too many callbacks" (≈1h at a 2s poll). The result is handed back through
+	// a package var because the daemon calls readReaperTitle serially.
+	enumFoundTitle string
+	enumTitleCb    = syscall.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
 		n, _, _ := procGetWindowTextLengthW.Call(hwnd)
 		if n == 0 {
 			return 1 // continue
@@ -387,13 +387,27 @@ func readReaperTitle() string {
 		procGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 		title := syscall.UTF16ToString(buf)
 		if idx := strings.Index(title, "REAPER v"); idx >= 0 {
-			found = title[idx:]
+			enumFoundTitle = title[idx:]
 			return 0 // stop enumeration
 		}
 		return 1 // continue
 	})
-	procEnumWindows.Call(cb, 0)
-	return found
+
+	cachedReaperTitle string // the title-bar string is constant per session
+)
+
+// readReaperTitle returns REAPER's title-bar text from "REAPER v" onward, e.g.
+// "REAPER v7.74 -Licensed for personal/small business use", or "" if no such
+// window exists. The "REAPER v..." portion doesn't change during a session, so
+// the first non-empty result is cached and EnumWindows is not scanned again.
+func readReaperTitle() string {
+	if cachedReaperTitle != "" {
+		return cachedReaperTitle
+	}
+	enumFoundTitle = ""
+	procEnumWindows.Call(enumTitleCb, 0)
+	cachedReaperTitle = enumFoundTitle
+	return enumFoundTitle
 }
 
 // transportInfo maps the transport state to a display emoji, a word, and the
