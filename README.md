@@ -175,11 +175,11 @@ Every image is just a square PNG (512×512 or larger) uploaded to **Rich Presenc
 - an optional idle image for `awayImageKey` (anything you like).
 - optionally `play` / `pause` / `record` / `stop` if you enable `smallImageByTransport`.
 
-Collecting plugin logos by hand is tedious, so it's a good job to hand to an AI agent that can browse and drive your machine — e.g. Claude in Chrome, or Claude Code with computer use. A prompt that works:
+You can do it by hand (grab each logo, square it off, upload). To skip the boring part, hand it to any AI assistant that can browse the web and click through a UI. A prompt that works:
 
 > For each plugin in the `vsts` array of my `reaper_discord_presence_config.json`, find the official logo, make a square PNG (≥512px, transparent or solid background) named `<imageKey>.png`, and upload each to my Discord application's **Rich Presence → Art Assets** under that exact key. Also add a `reaper` icon. Skip keys that already exist.
 
-Give Discord a few minutes to make new assets available after uploading. `config.example.json` in this repo is a full, ready-to-adapt config you can start from.
+Uploading to the portal needs an assistant that can drive the browser; a plain chat assistant can still help you find or generate the PNGs, which you then upload yourself. Give Discord a few minutes to make new assets available. `config.example.json` in this repo is a full, ready-to-adapt config you can start from.
 
 ## Troubleshooting
 
