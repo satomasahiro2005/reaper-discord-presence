@@ -107,6 +107,7 @@ Start the Discord desktop app and REAPER. `Playing REAPER` appears within a few 
 | `awayText` | `Idle` | Text shown while idle (e.g. `Idle`) |
 | `awayImageKey` | `""` | Large image while idle. Empty uses `largeImageKey` |
 | `resetTimerOnAway` | `true` | Elapsed-timer behavior. `true`: idle shows the idle duration, returning restarts from 0. `false`: one continuous timer from the session start that runs through idle |
+| `awayResetGraceMs` | `0` | Grace window for the return reset (only with `resetTimerOnAway: true`): come back within this long and the elapsed timer keeps its original start; a longer absence still resets. `0` = always reset on return |
 | `detailsFormat` | `v{ver} · {srate} · {bufsize} · {latency}` | Line 2 template (below) |
 | `stateFormat` | `{emoji} {fxOrTransport} · {bpm}` | Line 3 template (below) |
 | `showElapsed` | `true` | Show the elapsed timer |

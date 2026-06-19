@@ -9,6 +9,7 @@
   "awayText": "Idle",
   "awayImageKey": "",
   "resetTimerOnAway": true,
+  "awayResetGraceMs": 0,
   "detailsFormat": "v{ver} · {srate} · {bufsize} · {latency}",
   "stateFormat": "{fx} · {bpm}",
   "showElapsed": true,

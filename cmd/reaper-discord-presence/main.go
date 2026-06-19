@@ -80,6 +80,12 @@ type Config struct {
 	// that keeps running through idle and back. Absent/null counts as true.
 	ResetTimerOnAway *bool `json:"resetTimerOnAway"`
 
+	// AwayResetGraceMs is a grace window for the return reset (only relevant when
+	// resetTimerOnAway is true): if you come back within this long after going
+	// away, the elapsed timer keeps its original start instead of restarting.
+	// A longer absence still resets. 0 = always reset on return.
+	AwayResetGraceMs int `json:"awayResetGraceMs"`
+
 	// Deprecated alias for AwayAfterMs (kept so older configs still work).
 	HideAfterIdleMs int `json:"hideAfterIdleMs"`
 
@@ -883,9 +889,16 @@ func main() {
 			if sessionStart == 0 {
 				sessionStart = time.Now().UnixMilli() // first appearance
 			} else if away && resetTimer {
-				// Came back from away and we reset at the boundary: restart from 0.
-				log.Printf("back from away; play timer reset")
-				sessionStart = time.Now().UnixMilli()
+				// Returned from away. Reset the timer only if the absence was longer
+				// than the grace window; a short break keeps the original start.
+				awayMs := time.Now().UnixMilli() - awayStart
+				grace := int64(cfg.AwayResetGraceMs)
+				if grace <= 0 || awayMs > grace {
+					log.Printf("back from away (%ds); play timer reset", awayMs/1000)
+					sessionStart = time.Now().UnixMilli()
+				} else {
+					log.Printf("back from away (%ds, within grace); play timer kept", awayMs/1000)
+				}
 			}
 			away = false
 			act, key = buildActivity(cfg, st, sessionStart, deviceSrate, "")
