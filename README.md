@@ -166,6 +166,21 @@ When the top FX on the selected track contains a registered name, it can show a 
 
 On a match, the small badge prefers the registered icon (otherwise the transport badge), and button 2 becomes that VST's download link.
 
+## Preparing the icons
+
+Every image is just a square PNG (512×512 or larger) uploaded to **Rich Presence → Art Assets** under a key. You'll typically want:
+
+- `reaper` — the REAPER icon (`largeImageKey`).
+- one per registered VST, named with that entry's `imageKey` (`serum`, `vital`, …).
+- an optional idle image for `awayImageKey` (anything you like).
+- optionally `play` / `pause` / `record` / `stop` if you enable `smallImageByTransport`.
+
+Collecting plugin logos by hand is tedious, so it's a good job to hand to an AI agent that can browse and drive your machine — e.g. Claude in Chrome, or Claude Code with computer use. A prompt that works:
+
+> For each plugin in the `vsts` array of my `reaper_discord_presence_config.json`, find the official logo, make a square PNG (≥512px, transparent or solid background) named `<imageKey>.png`, and upload each to my Discord application's **Rich Presence → Art Assets** under that exact key. Also add a `reaper` icon. Skip keys that already exist.
+
+Give Discord a few minutes to make new assets available after uploading. `config.example.json` in this repo is a full, ready-to-adapt config you can start from.
+
 ## Troubleshooting
 
 **Nothing shows up**

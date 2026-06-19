@@ -127,19 +127,20 @@ func defaultConfig() Config {
 	return Config{
 		ClientID:         "YOUR_DISCORD_APPLICATION_ID",
 		LargeImageKey:    "reaper",
-		LargeImageText:   "",
-		ActivityType:     "playing", // empty -> auto (REAPER title-bar text)
+		ActivityType:     "listening", // "Listening to REAPER"
 		PollIntervalMs:   2000,
 		StaleAfterMs:     60000,  // tolerate ~60s of no updates (e.g. a VST-load hang) before treating REAPER as closed
 		AwayAfterMs:      600000, // 10 min of inactivity -> "away"; 0 disables
-		AwayText:         "Idle",
+		AwayText:         "⏸︎ Idle",
 		ResetTimerOnAway: boolPtr(true),
 
-		DetailsFormat: "v{ver} · {srate} · {bufsize} · {latency}", // {ver}=version without /x64; use {version} to keep the arch, or {title} for the title bar
-		StateFormat:   "{emoji} {fxOrTransport} · {bpm}",
+		LargeImageText: "[{srate} 24bit WAV : {channels} {bufsize} ~{latency} {driver}]", // surfaces as a caption line in the listening layout
+		DetailsFormat:  "▶︎ {fxOrTransport}",
+		StateFormat:    "{title}",
 
 		ShowElapsed:           true,
-		SmallImageByTransport: true,
+		SmallImageByTransport: false,
+		SwapImages:            true, // FX/VST icon large, REAPER as the small badge (when a VST icon is registered)
 
 		Button1Label: "Get REAPER",
 		Button1Url:   "https://www.reaper.fm/",
