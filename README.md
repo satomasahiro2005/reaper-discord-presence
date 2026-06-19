@@ -17,6 +17,10 @@ Shows "working in REAPER" on your Discord status while REAPER is open. No Node.j
 
 ## Example
 
+<img src="docs/preview.png" alt="REAPER Rich Presence on a Discord profile" width="300">
+
+*A customized profile (listening layout, audio caption, a per-plugin download button). Out of the box it's simpler:*
+
 ```
 Playing REAPER
 v7.74 · 48kHz · 128spls · 2.2/3.0ms
