@@ -25,6 +25,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -749,10 +750,60 @@ func touchHeartbeat(path string) {
 }
 
 // ---------------------------------------------------------------------------
+// re-exec to drop inherited handles
+// ---------------------------------------------------------------------------
+
+// reexecCleanHandles re-launches the daemon once, through Go's os/exec, so the
+// process that actually runs starts with a clean Windows handle table.
+//
+// Why this is needed: REAPER's Lua script launches the exe with
+// os.execute('start "" "<exe>"'), i.e. cmd /c start, which creates the child
+// with handle inheritance ENABLED. The freshly launched daemon therefore
+// inherits every *inheritable* handle REAPER had open at that instant —
+// including multi-GB sampler files (e.g. a loaded Pianoverse project's .pak
+// containers). The daemon never opens those files itself, but the inherited
+// duplicate handles outlive REAPER: when REAPER quits its own handle closes
+// while the daemon's copy lingers, ghost-locking the files (no FILE_SHARE_DELETE
+// -> blocked renames/deletes) until the daemon is killed. The watchdog
+// relaunching the daemon mid-session makes this worse.
+//
+// The fix: on modern Windows, Go's os/exec passes only the explicit stdio
+// handles to the child via PROC_THREAD_ATTRIBUTE_HANDLE_LIST, so a child started
+// this way is born WITHOUT any of REAPER's inherited handles. We spawn exactly
+// such a child and the original (handle-tainted) launcher exits immediately. An
+// env-var guard prevents an infinite re-exec loop.
+//
+// This must run before any other work — before the single-instance mutex, the
+// log file, or any file read — so the mutex and heartbeat live in the clean
+// child (not the throwaway launcher) and the tainted launcher holds nothing.
+func reexecCleanHandles() {
+	if os.Getenv("RDP_REEXEC") == "1" {
+		return // already the clean child: carry on with the daemon proper
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return // can't re-exec; degrade to running in place rather than not at all
+	}
+	cmd := exec.Command(exe)
+	cmd.Env = append(os.Environ(), "RDP_REEXEC=1")
+	// Stdin/Stdout/Stderr are left nil: Go wires them to NUL and marks only those
+	// three handles inheritable, so REAPER's file handles are excluded. (The exe
+	// is a windowsgui binary, so no console window flashes either.)
+	if err := cmd.Start(); err != nil {
+		return // spawn failed; fall through and run in place
+	}
+	os.Exit(0) // launcher's only job was to birth the clean child
+}
+
+// ---------------------------------------------------------------------------
 // main loop
 // ---------------------------------------------------------------------------
 
 func main() {
+	// Re-exec FIRST so the daemon that survives holds none of the file handles
+	// REAPER leaked into us via inheritance (see reexecCleanHandles).
+	reexecCleanHandles()
+
 	appData := os.Getenv("APPDATA")
 	if appData == "" {
 		return
