@@ -19,13 +19,7 @@ Shows "working in REAPER" on your Discord status while REAPER is open. No Node.j
 
 <img src="docs/preview.png" alt="REAPER Rich Presence on a Discord profile" width="300">
 
-*A customized profile (listening layout, audio caption, a per-plugin download button). Out of the box it's simpler:*
-
-```
-Playing REAPER
-v7.74 · 48kHz · 128spls · 2.2/3.0ms
-▶️ Serum · 128 BPM
-```
+The default layout: "Listening to REAPER", the plugin name on line 2, REAPER's title line below, and an audio-spec caption on the image. The large FX/VST icon with a small REAPER badge needs that plugin registered in `vsts` with an uploaded icon (see [Preparing the icons](#preparing-the-icons)); otherwise the REAPER icon stays large. Every line is a template you can rewrite (see [Configuration](#configuration)). "REAPER" on line 1 is the Discord app name.
 
 Each line is a template you can rewrite (see [Configuration](#configuration)). The card also carries the REAPER icon (or a registered VST's icon), an elapsed timer, and buttons. The "REAPER" on line 1 is the Discord app name, so whatever you call the app in the Developer Portal is what shows.
 
@@ -99,25 +93,27 @@ Start the Discord desktop app and REAPER. `Playing REAPER` appears within a few 
 |------|--------|------|
 | `clientId` | — | Discord Application ID (required) |
 | `largeImageKey` | `reaper` | Art Asset key for the large image |
-| `largeImageText` | `""` | Caption for the large image (templated, e.g. `REAPER v{ver}`). Empty falls back to the title-bar string. Shows as a visible line in the `listening` layout |
-| `activityType` | `playing` | Line 1 verb: `playing` / `listening` (→ Listening to) / `watching` / `competing`. RPC only honors these four |
+| `largeImageText` | audio caption¹ | Caption for the large image (templated). Empty falls back to the title-bar string. Shows as a visible line in the `listening` layout |
+| `activityType` | `listening` | Line 1 verb: `playing` / `listening` (→ Listening to) / `watching` / `competing`. RPC only honors these four |
 | `pollIntervalMs` | `2000` | How often (ms) to read the status JSON |
 | `staleAfterMs` | `60000` | If the JSON isn't updated for this long, REAPER is treated as closed. Defaults to 60s so a plugin-load hang doesn't clear it. A clean quit clears immediately (the Lua removes the status file) |
 | `awayAfterMs` | `600000` | Switch to "idle" after this long with no input or sound (10 min). `0` disables it |
-| `awayText` | `Idle` | Text shown while idle (e.g. `Idle`) |
+| `awayText` | `⏸︎ Idle` | Text shown while idle (e.g. `Idle`) |
 | `awayImageKey` | `""` | Large image while idle. Empty uses `largeImageKey` |
 | `resetTimerOnAway` | `true` | Elapsed-timer behavior. `true`: idle shows the idle duration, returning restarts from 0. `false`: one continuous timer from the session start that runs through idle |
 | `awayResetGraceMs` | `0` | Grace window for the return reset (only with `resetTimerOnAway: true`): come back within this long and the elapsed timer keeps its original start; a longer absence still resets. `0` = always reset on return |
-| `detailsFormat` | `v{ver} · {srate} · {bufsize} · {latency}` | Line 2 template (below) |
-| `stateFormat` | `{emoji} {fxOrTransport} · {bpm}` | Line 3 template (below) |
+| `detailsFormat` | `▶︎ {fxOrTransport}` | Line 2 template (below) |
+| `stateFormat` | `{title}` | Line 3 template (below) |
 | `showElapsed` | `true` | Show the elapsed timer |
-| `smallImageByTransport` | `true` | Show a small transport badge (needs `play`/`pause`/`record`/`stop` assets) |
-| `swapImages` | `false` | Swap the large and small art (VST/state icon large, REAPER as the small badge) |
+| `smallImageByTransport` | `false` | Show a small transport badge (needs `play`/`pause`/`record`/`stop` assets) |
+| `swapImages` | `true` | Swap the large and small art (VST/state icon large, REAPER as the small badge) |
 | `vsts` | `[]` | Plugin table (below) |
 | `button1Label` / `button1Url` | `Get REAPER` / reaper.fm | Button 1. Empty hides it |
 | `button2Label` / `button2Url` | `""` | Button 2. Empty hides it |
 
 Buttons are only visible to other people viewing your profile, not to you (icons and the text lines are visible to you). The project file name is never sent.
+
+¹ Default `largeImageText`: `[{srate} 24bit WAV : {channels} {bufsize} ~{latency} {driver}]`.
 
 ### Display templates (`detailsFormat` / `stateFormat`)
 

@@ -401,20 +401,25 @@ var (
 		return 1 // continue
 	})
 
-	cachedReaperTitle string // the title-bar string is constant per session
+	cachedReaperTitle  string // last scanned title-bar string
+	cachedTitleVersion string // the version it was cached for
 )
 
 // readReaperTitle returns REAPER's title-bar text from "REAPER v" onward, e.g.
 // "REAPER v7.74 -Licensed for personal/small business use", or "" if no such
-// window exists. The "REAPER v..." portion doesn't change during a session, so
-// the first non-empty result is cached and EnumWindows is not scanned again.
-func readReaperTitle() string {
-	if cachedReaperTitle != "" {
+// window exists. The result is cached and only re-scanned when the reported
+// version changes (e.g. after a REAPER update) — the daemon can outlive a REAPER
+// restart, so caching forever would pin a stale version after an upgrade.
+func readReaperTitle(version string) string {
+	if cachedReaperTitle != "" && cachedTitleVersion == version {
 		return cachedReaperTitle
 	}
 	enumFoundTitle = ""
 	procEnumWindows.Call(enumTitleCb, 0)
-	cachedReaperTitle = enumFoundTitle
+	if enumFoundTitle != "" {
+		cachedReaperTitle = enumFoundTitle
+		cachedTitleVersion = version
+	}
 	return enumFoundTitle
 }
 
@@ -556,7 +561,7 @@ func buildActivity(cfg Config, st Status, sessionStart int64, deviceSrate float6
 	}
 	// {title}: REAPER's actual title-bar text (version + license string), with a
 	// fallback if the window can't be read.
-	title := readReaperTitle()
+	title := readReaperTitle(version)
 	if title == "" {
 		title = "REAPER v" + version
 	}
