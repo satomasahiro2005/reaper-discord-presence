@@ -19,9 +19,9 @@ Shows "working in REAPER" on your Discord status while REAPER is open. No Node.j
 
 <img src="docs/preview.png" alt="REAPER Rich Presence on a Discord profile" width="300">
 
-The default layout: "Listening to REAPER", the plugin name on line 2, REAPER's title line below, and an audio-spec caption on the image. The large FX/VST icon with a small REAPER badge needs that plugin registered in `vsts` with an uploaded icon (see [Preparing the icons](#preparing-the-icons)); otherwise the REAPER icon stays large. Every line is a template you can rewrite (see [Configuration](#configuration)). "REAPER" on line 1 is the Discord app name.
+The default layout: "Listening to REAPER", the plugin name on line 2, REAPER's title line below, and an audio-spec caption on the image. The large FX/VST icon with a small REAPER badge needs that plugin registered in `vsts` with an uploaded icon (see [Preparing the icons](#preparing-the-icons)); otherwise the REAPER icon stays large. The card can also show an elapsed timer and buttons. Every line is a template you can rewrite (see [Configuration](#configuration)). "REAPER" on line 1 is the Discord app name, so whatever you call the app in the Developer Portal is what shows.
 
-Each line is a template you can rewrite (see [Configuration](#configuration)). The card also carries the REAPER icon (or a registered VST's icon), an elapsed timer, and buttons. The "REAPER" on line 1 is the Discord app name, so whatever you call the app in the Developer Portal is what shows.
+My own config is here as a real-world example: [reaper_discord_presence_config.json](https://gist.github.com/satomasahiro2005/7e72da41292bfdca25a2dafbcbdfaef4). It includes the full VST table I use, the listening layout, idle image, and plugin image keys. Replace `clientId` with your own Application ID before using it.
 
 ## How it works
 
